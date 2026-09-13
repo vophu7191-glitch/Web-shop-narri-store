@@ -10,62 +10,172 @@
     {% endif %}
 </div>
 
-<ul class="nav nav-pills brand-tabs justify-content-center" id="brandTabs" role="tablist">
-    {% for key, label in brands.items() %}
-    <li class="nav-item">
-        <a class="nav-link {% if loop.first %}active{% endif %}" data-toggle="pill" href="#brand-{{ key }}" role="tab">{{ label }}</a>
-    </li>
-    {% endfor %}
-</ul>
-
-<div class="tab-content">
-    {% for key, label in brands.items() %}
-    <div class="tab-pane fade {% if loop.first %}show active{% endif %}" id="brand-{{ key }}" role="tabpanel">
-        <div class="row">
-            {% set items = products_by_brand.get(key, []) %}
-            {% if not items %}
-                <div class="col-12 text-center text-muted py-5">Chưa có sản phẩm nào cho {{ label }}.</div>
-            {% endif %}
-            {% for p in items %}
-            <div class="col-md-4">
-                <div class="card product-card">
-                    <div class="card-body">
-                        <h5 class="card-title">{{ p.name }}</h5>
-                        <p class="text-muted small">{{ p.description }}</p>
-                        <div class="mb-2">
-                            <span class="badge badge-{{ 'success' if p.stock_count > 0 else 'secondary' }} stock-badge">
-                                {% if p.stock_count > 0 %}Còn {{ p.stock_count }} code{% else %}Hết hàng{% endif %}
-                            </span>
-                        </div>
-                        <div class="price-tag mb-3">{{ "{:,}".format(p.price) }} đ</div>
-                        <div class="mt-auto">
-                            {% if current_user %}
-                                <form method="post" action="{{ url_for('buy', product_id=p._id) }}" onsubmit="return confirm('Xác nhận mua {{ p.name }} giá {{ '{:,}'.format(p.price) }}đ?');">
-                                    <button class="btn btn-primary btn-block" {% if p.stock_count == 0 %}disabled{% endif %}>🎫 Mua ngay</button>
-                                </form>
-                            {% else %}
-                                <a href="{{ url_for('login') }}" class="btn btn-primary btn-block">Đăng nhập để mua</a>
-                            {% endif %}
-
-                            {% if current_user and current_user.role == 'admin' %}
-                            <div class="admin-only mt-2 p-2 rounded d-flex justify-content-between">
-                                <a href="{{ url_for('admin_stock', pid=p._id) }}" class="btn btn-sm btn-outline-dark">📦 Nhập code</a>
-                                <form method="post" action="{{ url_for('admin_toggle_product', pid=p._id) }}">
-                                    <button class="btn btn-sm btn-outline-secondary">{{ 'Ẩn' if p.enabled else 'Hiện' }}</button>
-                                </form>
-                                <form method="post" action="{{ url_for('admin_delete_product', pid=p._id) }}" onsubmit="return confirm('Xoá hẳn sản phẩm này và toàn bộ code trong kho?');">
-                                    <button class="btn btn-sm btn-outline-danger">🗑️</button>
-                                </form>
-                            </div>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
+<div class="row">
+    <!-- Sidebar danh mục -->
+    <div class="col-lg-3 col-12">
+        <div class="shop-sidebar card mb-4">
+            <div class="shop-sidebar-header">📂 Danh mục sản phẩm</div>
+            <div class="list-group list-group-flush brand-list" id="brandList">
+                {% for key, label in brands.items() %}
+                <a href="#" class="list-group-item list-group-item-action brand-item {% if loop.first %}active{% endif %}" data-brand="{{ key }}">
+                    <span>{{ label }}</span>
+                    <span class="badge badge-pill">{{ brand_counts.get(key, 0) }}</span>
+                </a>
+                {% endfor %}
             </div>
-            {% endfor %}
         </div>
     </div>
-    {% endfor %}
+
+    <!-- Sản phẩm theo danh mục đang chọn -->
+    <div class="col-lg-9 col-12">
+        <div class="shop-panel card mb-4">
+            <div class="shop-panel-header">
+                <h5 id="brandTitle">{{ brands.values()|list|first }}</h5>
+            </div>
+            <div class="shop-panel-body">
+                {% for key, label in brands.items() %}
+                <div class="row brand-group" data-brand="{{ key }}" {% if not loop.first %}style="display:none;"{% endif %}>
+                    {% set items = products_by_brand.get(key, []) %}
+                    {% if not items %}
+                        <div class="col-12 text-center text-muted py-5">Chưa có sản phẩm nào cho {{ label }}.</div>
+                    {% endif %}
+                    {% for p in items %}
+                    <div class="col-md-4 col-sm-6 mb-3">
+                        <div class="card product-card h-100">
+                            <div class="card-body d-flex flex-column">
+                                <h6 class="card-title">{{ p.name }}</h6>
+                                <p class="text-muted small">{{ p.description }}</p>
+                                <div class="mb-2">
+                                    <span class="badge badge-{{ 'success' if p.stock_count > 0 else 'secondary' }} stock-badge">
+                                        {% if p.stock_count > 0 %}Còn {{ p.stock_count }} code{% else %}Hết hàng{% endif %}
+                                    </span>
+                                </div>
+                                <div class="price-tag mb-3">{{ "{:,}".format(p.price) }} đ</div>
+                                <div class="mt-auto">
+                                    {% if current_user %}
+                                        <form method="post" action="{{ url_for('buy', product_id=p._id) }}" onsubmit="return confirm('Xác nhận mua {{ p.name }} giá {{ '{:,}'.format(p.price) }}đ?');">
+                                            <button class="btn btn-primary btn-block" {% if p.stock_count == 0 %}disabled{% endif %}>🎫 Mua ngay</button>
+                                        </form>
+                                    {% else %}
+                                        <a href="{{ url_for('login') }}" class="btn btn-primary btn-block">Đăng nhập để mua</a>
+                                    {% endif %}
+
+                                    {% if current_user and current_user.role == 'admin' %}
+                                    <div class="admin-only mt-2 p-2 rounded d-flex justify-content-between">
+                                        <a href="{{ url_for('admin_stock', pid=p._id) }}" class="btn btn-sm btn-outline-dark">📦 Nhập code</a>
+                                        <form method="post" action="{{ url_for('admin_toggle_product', pid=p._id) }}">
+                                            <button class="btn btn-sm btn-outline-secondary">{{ 'Ẩn' if p.enabled else 'Hiện' }}</button>
+                                        </form>
+                                        <form method="post" action="{{ url_for('admin_delete_product', pid=p._id) }}" onsubmit="return confirm('Xoá hẳn sản phẩm này và toàn bộ code trong kho?');">
+                                            <button class="btn btn-sm btn-outline-danger">🗑️</button>
+                                        </form>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
 </div>
 
+<!-- Feed hoạt động gần đây, kiểu taphoacloud -->
+<div class="row">
+    <div class="col-lg-6 col-12">
+        <div class="activity-card card mb-4">
+            <div class="activity-card-header">📦 Đơn hàng gần đây</div>
+            <div class="activity-list" id="recentOrders">
+                {% for o in recent_orders %}
+                <div class="activity-row">
+                    <div class="a-main"><b>{{ o.user }}</b> mua <b>{{ o.product }}</b> — {{ "{:,}".format(o.price) }}đ</div>
+                    <div class="a-time">{{ o.time }}</div>
+                </div>
+                {% else %}
+                <div class="activity-empty">Chưa có đơn hàng nào.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6 col-12">
+        <div class="activity-card card mb-4">
+            <div class="activity-card-header">💳 Nạp tiền gần đây</div>
+            <div class="activity-list" id="recentRecharges">
+                {% for r in recent_recharges %}
+                <div class="activity-row">
+                    <div class="a-main"><b>{{ r.user }}</b> nạp <b>{{ "{:,}".format(r.amount) }}đ</b> — {{ r.bank }}</div>
+                    <div class="a-time">{{ r.time }}</div>
+                </div>
+                {% else %}
+                <div class="activity-empty">Chưa có giao dịch nạp tiền nào.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_head %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // ----- Chuyển danh mục ở sidebar -----
+    var list = document.getElementById('brandList');
+    var title = document.getElementById('brandTitle');
+    if (list) {
+        list.addEventListener('click', function (e) {
+            var item = e.target.closest('.brand-item');
+            if (!item) return;
+            e.preventDefault();
+            list.querySelectorAll('.brand-item').forEach(function (el) { el.classList.remove('active'); });
+            item.classList.add('active');
+            var brand = item.getAttribute('data-brand');
+            title.textContent = item.querySelector('span').textContent;
+            document.querySelectorAll('.brand-group').forEach(function (g) {
+                g.style.display = (g.getAttribute('data-brand') === brand) ? '' : 'none';
+            });
+        });
+    }
+
+    // ----- Tự refresh feed đơn hàng / nạp tiền -----
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+    function fmt(n) { return Number(n || 0).toLocaleString('vi-VN'); }
+
+    function renderOrders(items) {
+        var el = document.getElementById('recentOrders');
+        if (!items.length) { el.innerHTML = '<div class="activity-empty">Chưa có đơn hàng nào.</div>'; return; }
+        el.innerHTML = items.map(function (o) {
+            return '<div class="activity-row"><div class="a-main"><b>' + escapeHtml(o.user) +
+                '</b> mua <b>' + escapeHtml(o.product) + '</b> — ' + fmt(o.price) +
+                'đ</div><div class="a-time">' + escapeHtml(o.time) + '</div></div>';
+        }).join('');
+    }
+    function renderRecharges(items) {
+        var el = document.getElementById('recentRecharges');
+        if (!items.length) { el.innerHTML = '<div class="activity-empty">Chưa có giao dịch nạp tiền nào.</div>'; return; }
+        el.innerHTML = items.map(function (r) {
+            return '<div class="activity-row"><div class="a-main"><b>' + escapeHtml(r.user) +
+                '</b> nạp <b>' + fmt(r.amount) + 'đ</b> — ' + escapeHtml(r.bank) +
+                '</div><div class="a-time">' + escapeHtml(r.time) + '</div></div>';
+        }).join('');
+    }
+    function refreshActivity() {
+        fetch('{{ url_for("api_activity") }}')
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                renderOrders(data.orders || []);
+                renderRecharges(data.recharges || []);
+            })
+            .catch(function () {});
+    }
+    setInterval(refreshActivity, 20000);
+});
+</script>
 {% endblock %}
