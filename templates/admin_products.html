@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Quản lý sản phẩm{% endblock %}
+{% block content %}
+
+<h4 class="mb-3">🛠️ Quản lý sản phẩm</h4>
+
+<div class="card p-4 mb-4">
+    <h6>➕ Thêm sản phẩm mới</h6>
+    <form method="post" class="row">
+        <div class="col-md-3">
+            <label>Thương hiệu</label>
+            <select name="brand" class="form-control" required>
+                {% for key, label in brands.items() %}
+                <option value="{{ key }}">{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label>Tên gói</label>
+            <input type="text" name="name" class="form-control" placeholder="VD: Gói 30 ngày VIP" required>
+        </div>
+        <div class="col-md-2">
+            <label>Giá (VNĐ)</label>
+            <input type="number" name="price" class="form-control" min="1" required>
+        </div>
+        <div class="col-md-3">
+            <label>Mô tả</label>
+            <input type="text" name="description" class="form-control" placeholder="Tuỳ chọn">
+        </div>
+        <div class="col-md-1 d-flex align-items-end">
+            <button class="btn btn-primary btn-block">Thêm</button>
+        </div>
+    </form>
+</div>
+
+<table class="table table-bordered bg-white">
+    <thead>
+        <tr><th>Thương hiệu</th><th>Tên gói</th><th>Giá</th><th>Tồn kho</th><th>Trạng thái</th><th>Thao tác</th></tr>
+    </thead>
+    <tbody>
+    {% for p in items %}
+        <tr>
+            <td>{{ brands.get(p.brand, p.brand) }}</td>
+            <td>{{ p.name }}</td>
+            <td>{{ "{:,}".format(p.price) }}đ</td>
+            <td>{{ p.stock_count }}</td>
+            <td>{% if p.enabled %}<span class="badge badge-success">Đang bán</span>{% else %}<span class="badge badge-secondary">Đã ẩn</span>{% endif %}</td>
+            <td>
+                <a href="{{ url_for('admin_stock', pid=p._id) }}" class="btn btn-sm btn-outline-dark">📦 Nhập code</a>
+                <form method="post" action="{{ url_for('admin_toggle_product', pid=p._id) }}" class="d-inline">
+                    <button class="btn btn-sm btn-outline-secondary">{{ 'Ẩn' if p.enabled else 'Hiện' }}</button>
+                </form>
+                <form method="post" action="{{ url_for('admin_delete_product', pid=p._id) }}" class="d-inline" onsubmit="return confirm('Xoá hẳn sản phẩm này và toàn bộ code trong kho?');">
+                    <button class="btn btn-sm btn-outline-danger">Xoá</button>
+                </form>
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+{% endblock %}

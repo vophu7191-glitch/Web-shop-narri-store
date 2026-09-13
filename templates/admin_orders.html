@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Tất cả đơn hàng{% endblock %}
+{% block content %}
+
+<h4 class="mb-3">📦 Tất cả đơn hàng ({{ orders|length }})</h4>
+
+<table class="table table-bordered bg-white">
+    <thead><tr><th>Thời gian</th><th>Khách hàng</th><th>Sản phẩm</th><th>Giá</th><th>Code đã giao</th></tr></thead>
+    <tbody>
+    {% for o in orders %}
+        <tr>
+            <td>{{ o.created_at.strftime("%d/%m/%Y %H:%M") }}</td>
+            <td>{{ users.get(o.user_id, o.user_id) }}</td>
+            <td>{{ o.product_name }}</td>
+            <td>{{ "{:,}".format(o.price) }}đ</td>
+            <td class="code-box">{{ o.code }}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+{% endblock %}

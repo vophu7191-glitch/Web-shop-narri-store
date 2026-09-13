@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>{{ cfg.site_name or "CloudShop" }} — {% block title %}Trang chủ{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/backend-plugin.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/responsive.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/backend.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/customize.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/all.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/default.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="{{ url_for('static', filename='js/jquery-3.6.0.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sweetalert2.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/cute-alert.js') }}"></script>
+    <style>
+        body { font-family: 'Roboto', sans-serif; background:#f4f6f9; }
+        .navbar-brand { font-weight:700; font-size:1.3rem; }
+        .brand-tabs { margin: 20px 0; }
+        .brand-tabs .nav-link { font-weight:600; }
+        .product-card { border-radius:12px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,.08); margin-bottom:20px; height:100%; }
+        .product-card .card-body { display:flex; flex-direction:column; }
+        .price-tag { font-size:1.15rem; font-weight:700; color:#e74c3c; }
+        .stock-badge { font-size:.8rem; }
+        .admin-only { border:1px dashed #f39c12; background:#fffaf0; }
+        .admin-bar { background:#2c3e50; color:#fff; padding:8px 16px; font-size:.9rem; }
+        .admin-bar a { color:#f1c40f; margin-right:14px; }
+        .code-box { font-family: monospace; background:#f1f1f1; padding:10px 14px; border-radius:8px; word-break:break-all; }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+{% if current_user and current_user.role == 'admin' %}
+<div class="admin-bar">
+    🛠️ Chế độ Admin —
+    <a href="{{ url_for('admin_products') }}">Quản lý sản phẩm</a>
+    <a href="{{ url_for('admin_orders') }}">Tất cả đơn hàng</a>
+    <a href="{{ url_for('admin_users') }}">Quản lý người dùng</a>
+    <a href="{{ url_for('admin_settings') }}">Cấu hình hệ thống</a>
+</div>
+{% endif %}
+
+<nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+    <div class="container">
+        <a class="navbar-brand" href="{{ url_for('home') }}">☁️ {{ cfg.site_name or "CloudShop" }}</a>
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navMain">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navMain">
+            <ul class="navbar-nav ml-auto align-items-lg-center">
+                {% if current_user %}
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('wallet') }}">💰 Ví: {{ "{:,}".format(current_user.balance) }}đ</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('orders') }}">📦 Đơn hàng của tôi</a></li>
+                    <li class="nav-item"><span class="nav-link">👤 {{ current_user.username }}</span></li>
+                    <li class="nav-item"><a class="btn btn-outline-secondary btn-sm ml-2" href="{{ url_for('logout') }}">Đăng xuất</a></li>
+                {% else %}
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('login') }}">Đăng nhập</a></li>
+                    <li class="nav-item"><a class="btn btn-primary btn-sm ml-2" href="{{ url_for('register') }}">Đăng ký</a></li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<div class="container mt-4 mb-5">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert {{ 'alert-danger' if category == 'error' else 'alert-success' }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+</div>
+
+</body>
+</html>

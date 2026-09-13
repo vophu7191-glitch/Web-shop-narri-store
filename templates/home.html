@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Bảng giá Code Cloud{% endblock %}
+{% block content %}
+
+<div class="text-center mb-4">
+    <h2>☁️ Bảng Giá Code Cloud Phone</h2>
+    <p class="text-muted">RedFinger · UGPhone · VIPPlayer · GenPlay · VMOS — Giao code tự động sau khi thanh toán</p>
+    {% if current_user and current_user.role == 'admin' %}
+        <a href="{{ url_for('admin_products') }}" class="btn btn-warning btn-sm">➕ Thêm sản phẩm mới</a>
+    {% endif %}
+</div>
+
+<ul class="nav nav-pills brand-tabs justify-content-center" id="brandTabs" role="tablist">
+    {% for key, label in brands.items() %}
+    <li class="nav-item">
+        <a class="nav-link {% if loop.first %}active{% endif %}" data-toggle="pill" href="#brand-{{ key }}" role="tab">{{ label }}</a>
+    </li>
+    {% endfor %}
+</ul>
+
+<div class="tab-content">
+    {% for key, label in brands.items() %}
+    <div class="tab-pane fade {% if loop.first %}show active{% endif %}" id="brand-{{ key }}" role="tabpanel">
+        <div class="row">
+            {% set items = products_by_brand.get(key, []) %}
+            {% if not items %}
+                <div class="col-12 text-center text-muted py-5">Chưa có sản phẩm nào cho {{ label }}.</div>
+            {% endif %}
+            {% for p in items %}
+            <div class="col-md-4">
+                <div class="card product-card">
+                    <div class="card-body">
+                        <h5 class="card-title">{{ p.name }}</h5>
+                        <p class="text-muted small">{{ p.description }}</p>
+                        <div class="mb-2">
+                            <span class="badge badge-{{ 'success' if p.stock_count > 0 else 'secondary' }} stock-badge">
+                                {% if p.stock_count > 0 %}Còn {{ p.stock_count }} code{% else %}Hết hàng{% endif %}
+                            </span>
+                        </div>
+                        <div class="price-tag mb-3">{{ "{:,}".format(p.price) }} đ</div>
+                        <div class="mt-auto">
+                            {% if current_user %}
+                                <form method="post" action="{{ url_for('buy', product_id=p._id) }}" onsubmit="return confirm('Xác nhận mua {{ p.name }} giá {{ '{:,}'.format(p.price) }}đ?');">
+                                    <button class="btn btn-primary btn-block" {% if p.stock_count == 0 %}disabled{% endif %}>🎫 Mua ngay</button>
+                                </form>
+                            {% else %}
+                                <a href="{{ url_for('login') }}" class="btn btn-primary btn-block">Đăng nhập để mua</a>
+                            {% endif %}
+
+                            {% if current_user and current_user.role == 'admin' %}
+                            <div class="admin-only mt-2 p-2 rounded d-flex justify-content-between">
+                                <a href="{{ url_for('admin_stock', pid=p._id) }}" class="btn btn-sm btn-outline-dark">📦 Nhập code</a>
+                                <form method="post" action="{{ url_for('admin_toggle_product', pid=p._id) }}">
+                                    <button class="btn btn-sm btn-outline-secondary">{{ 'Ẩn' if p.enabled else 'Hiện' }}</button>
+                                </form>
+                                <form method="post" action="{{ url_for('admin_delete_product', pid=p._id) }}" onsubmit="return confirm('Xoá hẳn sản phẩm này và toàn bộ code trong kho?');">
+                                    <button class="btn btn-sm btn-outline-danger">🗑️</button>
+                                </form>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% endblock %}

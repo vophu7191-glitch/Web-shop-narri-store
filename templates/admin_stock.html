@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Nhập kho — {{ p.name }}{% endblock %}
+{% block content %}
+
+<h4 class="mb-3">📦 Nhập kho code — {{ p.name }} ({{ brands.get(p.brand, p.brand) }})</h4>
+<a href="{{ url_for('admin_products') }}" class="btn btn-sm btn-outline-secondary mb-3">← Quay lại danh sách sản phẩm</a>
+
+<div class="card p-4 mb-4">
+    <form method="post">
+        <div class="form-group">
+            <label>Dán danh sách code, mỗi dòng 1 code</label>
+            <textarea name="codes" class="form-control" rows="8" placeholder="CODE-ABC123&#10;CODE-XYZ456&#10;..." required></textarea>
+        </div>
+        <button class="btn btn-primary">Nhập vào kho</button>
+    </form>
+</div>
+
+<h6>Còn lại trong kho: {{ remaining|length }} code</h6>
+<table class="table table-bordered bg-white">
+    <thead><tr><th>Code</th><th>Ngày nhập</th></tr></thead>
+    <tbody>
+    {% for c in remaining %}
+        <tr><td class="code-box">{{ c.code }}</td><td>{{ c.created_at.strftime("%d/%m/%Y %H:%M") }}</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+{% endblock %}

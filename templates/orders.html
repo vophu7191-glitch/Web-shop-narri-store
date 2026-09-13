@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Đơn hàng của tôi{% endblock %}
+{% block content %}
+
+<h4 class="mb-3">📦 Đơn hàng của tôi</h4>
+
+{% if orders %}
+<table class="table table-bordered bg-white">
+    <thead><tr><th>Thời gian</th><th>Thương hiệu</th><th>Sản phẩm</th><th>Giá</th><th>Mã nhận được</th></tr></thead>
+    <tbody>
+    {% for o in orders %}
+        <tr>
+            <td>{{ o.created_at.strftime("%d/%m/%Y %H:%M") }}</td>
+            <td>{{ brands.get(o.brand, o.brand) }}</td>
+            <td>{{ o.product_name }}</td>
+            <td>{{ "{:,}".format(o.price) }}đ</td>
+            <td><span class="code-box">{{ o.code }}</span></td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="text-muted">Bạn chưa mua sản phẩm nào. <a href="{{ url_for('home') }}">Xem bảng giá ngay</a></p>
+{% endif %}
+
+{% endblock %}

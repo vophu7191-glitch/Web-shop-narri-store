@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Đăng nhập{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-5">
+        <div class="card p-4">
+            <h4 class="mb-3 text-center">Đăng nhập</h4>
+            <form method="post">
+                <div class="form-group">
+                    <label>Tên đăng nhập</label>
+                    <input type="text" name="username" class="form-control" required autofocus>
+                </div>
+                <div class="form-group">
+                    <label>Mật khẩu</label>
+                    <input type="password" name="password" class="form-control" required>
+                </div>
+                <button class="btn btn-primary btn-block">Đăng nhập</button>
+            </form>
+            <p class="text-center mt-3 mb-0">Chưa có tài khoản? <a href="{{ url_for('register') }}">Đăng ký ngay</a></p>
+        </div>
+    </div>
+</div>
+{% endblock %}
