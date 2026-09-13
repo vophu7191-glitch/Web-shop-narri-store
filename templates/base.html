@@ -12,7 +12,6 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/default.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script src="{{ url_for('static', filename='js/jquery-3.6.0.js') }}"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/4.6.2/js/bootstrap.bundle.min.js"></script>
     <script src="{{ url_for('static', filename='js/sweetalert2.js') }}"></script>
     <script src="{{ url_for('static', filename='js/cute-alert.js') }}"></script>
     <style>
@@ -29,6 +28,7 @@
         .admin-bar a { color:#f1c40f; margin-right:14px; }
         .code-box { font-family: monospace; background:#f1f1f1; padding:10px 14px; border-radius:8px; word-break:break-all; }
     </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/shop-theme.css') }}">
     {% block extra_head %}{% endblock %}
 </head>
 <body>
