@@ -425,4 +425,6 @@ def admin_settings():
 # ══════════════════════════════════════════════════════════════
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)
+    from waitress import serve
+    print(f"🚀 Chạy production server (waitress) tại cổng {port}")
+    serve(app, host="0.0.0.0", port=port)
