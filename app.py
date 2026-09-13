@@ -36,16 +36,18 @@ _mc = MongoClient(MONGO_URI, serverSelectionTimeoutMS=8000)
 _mc.server_info()  # ném lỗi ngay nếu không kết nối được, dễ debug lúc deploy
 db = _mc["cloudshop"]
 
-col_users    = db["users"]
-col_products = db["products"]
-col_stock    = db["stock_codes"]
-col_orders   = db["orders"]
-col_config   = db["config"]
+col_users     = db["users"]
+col_products  = db["products"]
+col_stock     = db["stock_codes"]
+col_orders    = db["orders"]
+col_config    = db["config"]
+col_recharges = db["recharges"]
 
 # Index cơ bản (an toàn khi gọi lại nhiều lần, chỉ tạo nếu chưa có)
 col_users.create_index("username", unique=True)
 col_stock.create_index([("product_id", 1), ("sold", 1)])
 col_orders.create_index([("user_id", 1), ("created_at", -1)])
+col_recharges.create_index([("created_at", -1)])
 
 BRANDS = {
     "redfinger": "RedFinger",
@@ -108,17 +110,88 @@ def inject_globals():
 
 
 # ══════════════════════════════════════════════════════════════
+#  TIỆN ÍCH CHO FEED "ĐƠN HÀNG / NẠP TIỀN GẦN ĐÂY" (kiểu taphoacloud)
+# ══════════════════════════════════════════════════════════════
+def mask_id(s):
+    """ab12cd345 -> ...345 (ẩn bớt, giữ 3 ký tự cuối)."""
+    s = str(s or "")
+    return f"...{s[-3:]}" if len(s) > 3 else s
+
+
+def short_text(s, n=34):
+    s = str(s or "")
+    return s if len(s) <= n else s[:n].rstrip() + "..."
+
+
+def timeago(dt):
+    if not dt:
+        return ""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    secs = int((datetime.now(timezone.utc) - dt).total_seconds())
+    if secs < 60:
+        return "vừa xong"
+    mins = secs // 60
+    if mins < 60:
+        return f"{mins} phút trước"
+    hours = mins // 60
+    if hours < 24:
+        return f"{hours} giờ trước"
+    return f"{hours // 24} ngày trước"
+
+
+app.jinja_env.filters["timeago"] = timeago
+
+
+def get_recent_activity(limit=15):
+    orders_raw = list(col_orders.find().sort("created_at", -1).limit(limit))
+    uids = {o["user_id"] for o in orders_raw}
+    users_map = {u["_id"]: u["username"]
+                 for u in col_users.find({"_id": {"$in": list(uids)}}, {"username": 1})}
+    recent_orders = [{
+        "user": mask_id(users_map.get(o["user_id"], o["user_id"])),
+        "product": short_text(o.get("product_name", "")),
+        "price": o.get("price", 0),
+        "time": timeago(o.get("created_at")),
+    } for o in orders_raw]
+
+    recharges_raw = list(col_recharges.find().sort("created_at", -1).limit(limit))
+    recent_recharges = [{
+        "user": mask_id(r.get("username", "")),
+        "amount": r.get("amount", 0),
+        "bank": r.get("bank") or "Ngân hàng",
+        "time": timeago(r.get("created_at")),
+    } for r in recharges_raw]
+
+    return recent_orders, recent_recharges
+
+
+# ══════════════════════════════════════════════════════════════
 #  TRANG CHỦ — danh sách sản phẩm theo từng brand
 # ══════════════════════════════════════════════════════════════
 @app.route("/")
 def home():
     products_by_brand = {}
+    brand_counts = {}
     for b in BRANDS:
         items = list(col_products.find({"brand": b, "enabled": True}).sort("price", 1))
         for it in items:
             it["stock_count"] = col_stock.count_documents({"product_id": it["_id"], "sold": False})
         products_by_brand[b] = items
-    return render_template("home.html", products_by_brand=products_by_brand)
+        brand_counts[b] = len(items)
+
+    recent_orders, recent_recharges = get_recent_activity()
+    return render_template("home.html",
+                            products_by_brand=products_by_brand,
+                            brand_counts=brand_counts,
+                            recent_orders=recent_orders,
+                            recent_recharges=recent_recharges)
+
+
+@app.route("/api/activity")
+def api_activity():
+    recent_orders, recent_recharges = get_recent_activity()
+    return jsonify({"orders": recent_orders, "recharges": recent_recharges})
 
 
 # ══════════════════════════════════════════════════════════════
@@ -241,6 +314,15 @@ def sepay_webhook():
     )
     if not result:
         return jsonify({"success": True})  # user không tồn tại -> bỏ qua êm
+
+    col_recharges.insert_one({
+        "_id": uuid.uuid4().hex[:12],
+        "user_id": uid,
+        "username": result.get("username", uid),
+        "amount": amount,
+        "bank": payload.get("gateway") or "Ngân hàng",
+        "created_at": datetime.now(timezone.utc),
+    })
 
     return jsonify({"success": True})
 
@@ -425,6 +507,4 @@ def admin_settings():
 # ══════════════════════════════════════════════════════════════
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
-    from waitress import serve
-    print(f"🚀 Chạy production server (waitress) tại cổng {port}")
-    serve(app, host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port)
