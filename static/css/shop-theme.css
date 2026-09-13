@@ -1,0 +1,60 @@
+:root{
+  --shop-primary:#3b6fe0;
+  --shop-dark:#1f2a44;
+  --shop-bg:#f4f6fb;
+  --shop-border:#e7eaf3;
+  --shop-muted:#8a94a6;
+}
+body{ background:var(--shop-bg); }
+
+/* ---------- Sidebar danh mục ---------- */
+.shop-sidebar{ border:1px solid var(--shop-border); border-radius:14px; overflow:hidden; }
+.shop-sidebar-header{
+  background:var(--shop-dark); color:#fff; padding:14px 16px;
+  font-weight:700; font-size:.92rem; letter-spacing:.02em;
+}
+.brand-list .brand-item{
+  display:flex; align-items:center; justify-content:space-between;
+  border:none; border-bottom:1px solid var(--shop-border);
+  padding:12px 16px; color:#2c3e50; font-weight:600; font-size:.92rem;
+}
+.brand-list .brand-item:last-child{ border-bottom:none; }
+.brand-list .brand-item .badge{ background:var(--shop-bg); color:var(--shop-muted); font-weight:600; }
+.brand-list .brand-item.active,
+.brand-list .brand-item:hover{ background:var(--shop-primary); color:#fff; text-decoration:none; }
+.brand-list .brand-item.active .badge,
+.brand-list .brand-item:hover .badge{ background:rgba(255,255,255,.22); color:#fff; }
+
+@media (max-width:991px){
+  .shop-sidebar-header{ display:none; }
+  .brand-list{ display:flex; flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .brand-list .brand-item{ flex:0 0 auto; border-bottom:none; border-right:1px solid var(--shop-border); white-space:nowrap; }
+}
+
+/* ---------- Khung sản phẩm ---------- */
+.shop-panel{ border:1px solid var(--shop-border); border-radius:14px; }
+.shop-panel-header{ padding:14px 18px; border-bottom:1px solid var(--shop-border); }
+.shop-panel-header h5{ margin:0; font-weight:700; color:var(--shop-dark); }
+.shop-panel-body{ padding:18px; }
+
+.product-card{
+  border:1px solid var(--shop-border) !important;
+  border-radius:12px !important;
+  box-shadow:none !important;
+  transition:.15s;
+}
+.product-card:hover{ box-shadow:0 6px 18px rgba(31,42,68,.08) !important; transform:translateY(-2px); }
+
+/* ---------- Feed đơn hàng / nạp tiền ---------- */
+.activity-card{ border:1px solid var(--shop-border); border-radius:14px; overflow:hidden; }
+.activity-card-header{ background:var(--shop-dark); color:#fff; padding:12px 16px; font-weight:700; font-size:.9rem; }
+.activity-list{ max-height:340px; overflow-y:auto; }
+.activity-row{
+  display:flex; justify-content:space-between; gap:10px;
+  padding:10px 16px; border-bottom:1px solid var(--shop-border); font-size:.83rem;
+}
+.activity-row:last-child{ border-bottom:none; }
+.activity-row .a-main{ color:#2c3e50; }
+.activity-row .a-main b{ color:var(--shop-primary); }
+.activity-row .a-time{ color:var(--shop-muted); white-space:nowrap; font-size:.76rem; }
+.activity-empty{ padding:24px; text-align:center; color:var(--shop-muted); font-size:.85rem; }
