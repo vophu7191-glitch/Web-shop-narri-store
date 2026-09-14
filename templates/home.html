@@ -3,7 +3,7 @@
 {% block content %}
 
 <div class="hero">
-    <div class="hero-eyebrow"><span class="dot"></span>GIAO CODE TỰ ĐỘNG — DƯỚI 5 GIÂY</div>
+    <div class="hero-eyebrow">✓ Giao code tự động, không cần chờ admin</div>
     <h1>Code kích hoạt cho thiết bị đám mây</h1>
     <p class="lead">RedFinger · UGPhone · VIPPlayer · GenPlay · VMOS — mua xong nhận code ngay, không chờ admin trực.</p>
     {% if current_user and current_user.role == 'admin' %}
@@ -26,7 +26,7 @@
             {% set items = products_by_brand.get(key, []) %}
             {% if not items %}
                 <div class="col-12 py-5">
-                    <p class="text-muted" style="font-family:'Space Grotesk',monospace;font-size:.85rem;">— chưa có gói nào cho {{ label }} —</p>
+                    <p class="text-muted">Chưa có sản phẩm nào cho {{ label }}.</p>
                 </div>
             {% endif %}
             {% for p in items %}
@@ -38,9 +38,9 @@
 
                         <div class="mb-3">
                             {% if p.stock_count > 0 %}
-                            <span class="stock-readout"><span class="dot"></span>CÒN {{ p.stock_count }} CODE</span>
+                            <span class="stock-readout">Còn {{ p.stock_count }} code</span>
                             {% else %}
-                            <span class="stock-readout out"><span class="dot"></span>HẾT HÀNG</span>
+                            <span class="stock-readout out">Hết hàng</span>
                             {% endif %}
                         </div>
 
