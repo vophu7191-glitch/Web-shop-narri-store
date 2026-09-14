@@ -15,49 +15,85 @@
 </head>
 <body>
 
-{% if current_user and current_user.role == 'admin' %}
-<div class="admin-bar">
-    <span class="dot" style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#34E0C4;box-shadow:0 0 6px #34E0C4;margin-right:8px;"></span>ADMIN —
-    <a href="{{ url_for('admin_products') }}">Sản phẩm</a>
-    <a href="{{ url_for('admin_orders') }}">Đơn hàng</a>
-    <a href="{{ url_for('admin_users') }}">Người dùng</a>
-    <a href="{{ url_for('admin_settings') }}">Cấu hình</a>
-</div>
-{% endif %}
+<div class="shell">
 
-<nav class="navbar navbar-expand-lg navbar-light">
-    <div class="container">
-        <a class="navbar-brand" href="{{ url_for('home') }}">{{ cfg.site_name or "CloudShop" }}</a>
-        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navMain">
-            <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse" id="navMain">
-            <ul class="navbar-nav ml-auto align-items-lg-center">
-                {% if current_user %}
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('wallet') }}">Ví · {{ "{:,}".format(current_user.balance) }}đ</a></li>
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('orders') }}">Đơn hàng</a></li>
-                    <li class="nav-item"><span class="nav-link">{{ current_user.username }}</span></li>
-                    <li class="nav-item"><a class="btn btn-outline-secondary btn-sm ml-lg-2" href="{{ url_for('logout') }}">Đăng xuất</a></li>
-                {% else %}
-                    <li class="nav-item"><a class="nav-link" href="{{ url_for('login') }}">Đăng nhập</a></li>
-                    <li class="nav-item"><a class="btn btn-primary btn-sm ml-lg-2" href="{{ url_for('register') }}">Đăng ký</a></li>
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+            <span class="dot"></span>{{ cfg.site_name or "CloudShop" }}
+        </div>
+
+        {% if current_user %}
+        <div class="sidebar-balance">
+            <span class="label">Số dư ví</span>
+            <span class="value">{{ "{:,}".format(current_user.balance) }}đ</span>
+        </div>
+        {% endif %}
+
+        <nav class="sidebar-nav">
+            <a href="{{ url_for('home') }}" class="{{ 'active' if request.endpoint == 'home' }}">Trang chủ</a>
+            {% if current_user %}
+                <a href="{{ url_for('wallet') }}" class="{{ 'active' if request.endpoint == 'wallet' }}">Nạp tiền / Ví</a>
+                <a href="{{ url_for('orders') }}" class="{{ 'active' if request.endpoint == 'orders' }}">Lịch sử mua hàng</a>
+            {% endif %}
+
+            {% if current_user and current_user.role == 'admin' %}
+            <div class="sidebar-section">QUẢN TRỊ</div>
+            <a href="{{ url_for('admin_products') }}" class="{{ 'active' if request.endpoint == 'admin_products' }}">Sản phẩm &amp; kho code</a>
+            <a href="{{ url_for('admin_orders') }}" class="{{ 'active' if request.endpoint == 'admin_orders' }}">Tất cả đơn hàng</a>
+            <a href="{{ url_for('admin_users') }}" class="{{ 'active' if request.endpoint == 'admin_users' }}">Người dùng</a>
+            <a href="{{ url_for('admin_settings') }}" class="{{ 'active' if request.endpoint == 'admin_settings' }}">Cấu hình hệ thống</a>
+            {% endif %}
+        </nav>
+
+        <div class="sidebar-auth">
+            {% if current_user %}
+                <div class="sidebar-user">{{ current_user.username }}{% if current_user.role == 'admin' %}<span class="tag">ADMIN</span>{% endif %}</div>
+                <a href="{{ url_for('logout') }}" class="btn btn-outline-secondary btn-sm btn-block">Đăng xuất</a>
+            {% else %}
+                <a href="{{ url_for('login') }}" class="btn btn-outline-secondary btn-sm btn-block mb-2">Đăng nhập</a>
+                <a href="{{ url_for('register') }}" class="btn btn-primary btn-sm btn-block">Đăng ký</a>
+            {% endif %}
+        </div>
+    </aside>
+
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <div class="main-area">
+        <header class="topbar">
+            <button class="topbar-toggle" id="sidebarToggle" aria-label="Mở menu">
+                <span></span><span></span><span></span>
+            </button>
+            <span class="topbar-title">{{ self.title() }}</span>
+        </header>
+
+        <div class="content-container">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert {{ 'alert-danger' if category == 'error' else 'alert-success' }}">{{ message }}</div>
+                    {% endfor %}
                 {% endif %}
-            </ul>
+            {% endwith %}
+
+            {% block content %}{% endblock %}
         </div>
     </div>
-</nav>
 
-<div class="container mt-4 mb-5">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-                <div class="alert {{ 'alert-danger' if category == 'error' else 'alert-success' }}">{{ message }}</div>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
-
-    {% block content %}{% endblock %}
 </div>
+
+<script>
+    (function() {
+        var sidebar = document.getElementById('sidebar');
+        var overlay = document.getElementById('sidebarOverlay');
+        var toggle  = document.getElementById('sidebarToggle');
+        function close() { sidebar.classList.remove('open'); overlay.classList.remove('show'); }
+        function open()  { sidebar.classList.add('open'); overlay.classList.add('show'); }
+        toggle.addEventListener('click', function() {
+            sidebar.classList.contains('open') ? close() : open();
+        });
+        overlay.addEventListener('click', close);
+    })();
+</script>
 
 </body>
 </html>
