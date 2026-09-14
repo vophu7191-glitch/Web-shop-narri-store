@@ -5,20 +5,36 @@
 <h4 class="mb-3">📦 Đơn hàng của tôi</h4>
 
 {% if orders %}
-<table class="table table-bordered bg-white">
-    <thead><tr><th>Thời gian</th><th>Thương hiệu</th><th>Sản phẩm</th><th>Giá</th><th>Mã nhận được</th></tr></thead>
-    <tbody>
+<div class="row">
     {% for o in orders %}
-        <tr>
-            <td>{{ o.created_at.strftime("%d/%m/%Y %H:%M") }}</td>
-            <td>{{ brands.get(o.brand, o.brand) }}</td>
-            <td>{{ o.product_name }}</td>
-            <td>{{ "{:,}".format(o.price) }}đ</td>
-            <td><span class="code-box">{{ o.code }}</span></td>
-        </tr>
+    <div class="col-lg-6 mb-3">
+        <div class="card p-3">
+            <div class="row">
+                <div class="col-6 info-field mb-2">
+                    <label>Thương hiệu</label>
+                    <div class="info-value">{{ brands.get(o.brand, o.brand) }}</div>
+                </div>
+                <div class="col-6 info-field mb-2">
+                    <label>Thanh toán</label>
+                    <div class="info-value">{{ "{:,}".format(o.price) }}đ</div>
+                </div>
+                <div class="col-12 info-field mb-2">
+                    <label>Sản phẩm</label>
+                    <div class="info-value">{{ o.product_name }}</div>
+                </div>
+                <div class="col-6 info-field mb-0">
+                    <label>Thời gian</label>
+                    <div class="info-value">{{ o.created_at.strftime("%d/%m/%Y %H:%M") }}</div>
+                </div>
+                <div class="col-6 info-field mb-0">
+                    <label>Mã nhận được</label>
+                    <div class="code-box" style="font-size:.78rem;">{{ o.code }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
     {% endfor %}
-    </tbody>
-</table>
+</div>
 {% else %}
 <p class="text-muted">Bạn chưa mua sản phẩm nào. <a href="{{ url_for('home') }}">Xem bảng giá ngay</a></p>
 {% endif %}

@@ -4,69 +4,155 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <title>{{ cfg.site_name or "CloudShop" }} — {% block title %}Trang chủ{% endblock %}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.6.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/backend-plugin.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/responsive.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/backend.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/customize.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/all.min.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/default.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script src="{{ url_for('static', filename='js/jquery-3.6.0.js') }}"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/4.6.2/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/sweetalert2.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/cute-alert.js') }}"></script>
+    <style>
+        body { font-family: 'Roboto', sans-serif; }
+        /* Gradient xanh -> vàng giống taphoacloud.vn */
+        .iq-sidebar { background: linear-gradient(180deg, #2D11FE 0%, #2D11FE 60%, #F0FF0D 150%); }
+        .iq-sidebar-menu .side-menu li a.active-brand { color:#fff; background: rgba(255,255,255,.12); border-radius:5px; }
+        .content-page { padding-top: 90px; }
+        .price-tag { font-size:1.15rem; font-weight:700; color:#e74c3c; }
+        .stock-badge { font-size:.8rem; }
+        .admin-only { border:1px dashed #f39c12; background:#fffaf0; }
+        .code-box { font-family: monospace; background:#f1f1f1; padding:10px 14px; border-radius:8px; word-break:break-all; }
+        .product-card { transition:.15s; }
+        .product-card:hover { box-shadow:0 6px 18px rgba(12,37,86,.1); transform:translateY(-2px); }
+        .info-field label { display:block; font-size:.78rem; color:#8a94a6; margin-bottom:4px; font-weight:600; text-transform:uppercase; letter-spacing:.02em; }
+        .info-field .info-value { background:#f4f6fa; border:1px solid #e7eaf3; border-radius:8px; padding:9px 12px; color:#324253; word-break:break-word; }
+        .mobile-bottom-bar {
+            display:none; position:fixed; left:0; right:0; bottom:0; z-index:998;
+            background:#fff; border-top:1px solid #e7eaf3; padding:8px 18px;
+            align-items:center; justify-content:space-between; box-shadow:0 -4px 14px rgba(12,37,86,.08);
+        }
+        .mobile-bottom-bar a { color:#324253; text-decoration:none; text-align:center; }
+        @media (max-width:1299px){ .content-page{ padding-top: 80px; } }
+        @media (max-width:991px){
+            .mobile-bottom-bar{ display:flex; }
+            .content-page{ padding-bottom:66px; }
+        }
+    </style>
     {% block extra_head %}{% endblock %}
 </head>
 <body>
 
-<div class="shell">
-
-    <aside class="sidebar" id="sidebar">
-        <div class="sidebar-brand">
-            <span class="dot"></span>{{ cfg.site_name or "CloudShop" }}
+<div class="wrapper">
+    <!-- ============ SIDEBAR ============ -->
+    <div class="iq-sidebar sidebar-default">
+        <div class="iq-sidebar-logo d-flex align-items-end justify-content-between">
+            <a href="{{ url_for('home') }}" class="header-logo">
+                <span class="text-white font-weight-bold" style="font-size:1.15rem;">☁️ {{ cfg.site_name or "CloudShop" }}</span>
+            </a>
+            <div class="side-menu-bt-sidebar-1" onclick="document.body.classList.toggle('sidebar-main')">
+                <svg xmlns="http://www.w3.org/2000/svg" class="text-light wrapper-menu" width="26" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </div>
         </div>
 
-        {% if current_user %}
-        <div class="sidebar-balance">
-            <span class="label">Số dư ví</span>
-            <span class="value">{{ "{:,}".format(current_user.balance) }}đ</span>
+        <div class="data-scrollbar" data-scroll="1">
+            <nav class="iq-sidebar-menu">
+                <ul id="iq-sidebar-toggle" class="side-menu">
+
+                    <li class="px-3 pt-3 pb-2">
+                        <span class="text-uppercase small font-weight-bold text-white">
+                            {% if current_user %}
+                                Ví: <span style="color:yellow;">{{ "{:,}".format(current_user.balance) }}đ</span>
+                            {% else %}
+                                Số dư: <span style="color:yellow;">0đ</span>
+                            {% endif %}
+                        </span>
+                    </li>
+
+                    <li class="sidebar-layout">
+                        <a href="{{ url_for('home') }}" class="svg-icon">
+                            <i class="fas fa-home"></i><span class="ml-2">Trang chủ</span>
+                        </a>
+                    </li>
+
+                    <li class="sidebar-layout">
+                        <a href="#menuSanPham" class="svg-icon collapsed" data-toggle="collapse" aria-expanded="false"
+                           onclick="event.preventDefault(); document.getElementById('menuSanPham').classList.toggle('show'); this.setAttribute('aria-expanded', this.getAttribute('aria-expanded')!=='true');">
+                            <i class="fas fa-shopping-cart"></i><span class="ml-2">Mua tài khoản</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="svg-icon iq-arrow-right arrow-active" width="15" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                        </a>
+                        <ul id="menuSanPham" class="submenu collapse">
+                            {% for key, label in brands.items() %}
+                            <li class="sidebar-layout">
+                                <a href="{{ url_for('home') }}#brand-{{ key }}" class="svg-icon brand-link" data-brand="{{ key }}">
+                                    <i class="{{ brand_icons.get(key, 'fas fa-mobile-alt') }}"></i>
+                                    <span class="ml-2">{{ label }}</span>
+                                    <span class="badge badge-light ml-1">{{ brand_counts.get(key, 0) }}</span>
+                                </a>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </li>
+
+                    {% if current_user %}
+                    <li class="sidebar-layout">
+                        <a href="{{ url_for('orders') }}" class="svg-icon"><i class="fas fa-history"></i><span class="ml-2">Đơn hàng của tôi</span></a>
+                    </li>
+                    <li class="sidebar-layout">
+                        <a href="{{ url_for('wallet') }}" class="svg-icon"><i class="fas fa-wallet"></i><span class="ml-2">Nạp tiền / Ví</span></a>
+                    </li>
+                    {% endif %}
+
+                    {% if current_user and current_user.role == 'admin' %}
+                    <li class="px-3 pt-3 pb-2"><span class="text-uppercase small font-weight-bold text-white">Quản trị</span></li>
+                    <li class="sidebar-layout"><a href="{{ url_for('admin_products') }}" class="svg-icon"><i class="fas fa-box"></i><span class="ml-2">Quản lý sản phẩm</span></a></li>
+                    <li class="sidebar-layout"><a href="{{ url_for('admin_orders') }}" class="svg-icon"><i class="fas fa-receipt"></i><span class="ml-2">Tất cả đơn hàng</span></a></li>
+                    <li class="sidebar-layout"><a href="{{ url_for('admin_users') }}" class="svg-icon"><i class="fas fa-users-cog"></i><span class="ml-2">Quản lý người dùng</span></a></li>
+                    <li class="sidebar-layout"><a href="{{ url_for('admin_settings') }}" class="svg-icon"><i class="fas fa-cogs"></i><span class="ml-2">Cấu hình hệ thống</span></a></li>
+                    {% endif %}
+
+                    <li class="px-3 pt-3 pb-2"><span class="text-uppercase small font-weight-bold text-white">Tài khoản</span></li>
+                    {% if current_user %}
+                    <li class="sidebar-layout"><a href="#" class="svg-icon"><i class="fas fa-user"></i><span class="ml-2">{{ current_user.username }}</span></a></li>
+                    <li class="sidebar-layout"><a href="{{ url_for('logout') }}" class="svg-icon"><i class="fas fa-sign-out-alt"></i><span class="ml-2">Đăng xuất</span></a></li>
+                    {% else %}
+                    <li class="sidebar-layout"><a href="{{ url_for('login') }}" class="svg-icon"><i class="fas fa-sign-in-alt"></i><span class="ml-2">Đăng nhập</span></a></li>
+                    <li class="sidebar-layout"><a href="{{ url_for('register') }}" class="svg-icon"><i class="fas fa-user-plus"></i><span class="ml-2">Đăng ký</span></a></li>
+                    {% endif %}
+                </ul>
+            </nav>
+            <div class="pt-5 pb-5"></div>
         </div>
-        {% endif %}
+    </div>
 
-        <nav class="sidebar-nav">
-            <a href="{{ url_for('home') }}" class="{{ 'active' if request.endpoint == 'home' }}">Trang chủ</a>
-            {% if current_user %}
-                <a href="{{ url_for('wallet') }}" class="{{ 'active' if request.endpoint == 'wallet' }}">Nạp tiền / Ví</a>
-                <a href="{{ url_for('orders') }}" class="{{ 'active' if request.endpoint == 'orders' }}">Lịch sử mua hàng</a>
-            {% endif %}
-
-            {% if current_user and current_user.role == 'admin' %}
-            <div class="sidebar-section">QUẢN TRỊ</div>
-            <a href="{{ url_for('admin_products') }}" class="{{ 'active' if request.endpoint == 'admin_products' }}">Sản phẩm &amp; kho code</a>
-            <a href="{{ url_for('admin_orders') }}" class="{{ 'active' if request.endpoint == 'admin_orders' }}">Tất cả đơn hàng</a>
-            <a href="{{ url_for('admin_users') }}" class="{{ 'active' if request.endpoint == 'admin_users' }}">Người dùng</a>
-            <a href="{{ url_for('admin_settings') }}" class="{{ 'active' if request.endpoint == 'admin_settings' }}">Cấu hình hệ thống</a>
-            {% endif %}
-        </nav>
-
-        <div class="sidebar-auth">
-            {% if current_user %}
-                <div class="sidebar-user">{{ current_user.username }}{% if current_user.role == 'admin' %}<span class="tag">ADMIN</span>{% endif %}</div>
-                <a href="{{ url_for('logout') }}" class="btn btn-outline-secondary btn-sm btn-block">Đăng xuất</a>
-            {% else %}
-                <a href="{{ url_for('login') }}" class="btn btn-outline-secondary btn-sm btn-block mb-2">Đăng nhập</a>
-                <a href="{{ url_for('register') }}" class="btn btn-primary btn-sm btn-block">Đăng ký</a>
-            {% endif %}
+    <!-- ============ TOP NAVBAR ============ -->
+    <div class="iq-top-navbar">
+        <div class="iq-navbar-custom">
+            <nav class="navbar navbar-expand-lg navbar-light p-0">
+                <div class="side-menu-bt-sidebar" onclick="document.body.classList.toggle('sidebar-main')">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="text-secondary wrapper-menu" width="30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                    </svg>
+                    {% if current_user %}
+                        <span class="badge border border-primary text-primary"><i class="fas fa-wallet mr-1"></i>Ví: <b>{{ "{:,}".format(current_user.balance) }}đ</b></span>
+                        <a href="{{ url_for('logout') }}" class="badge border border-secondary text-secondary"><i class="fas fa-sign-out-alt mr-1"></i><b>{{ current_user.username }}</b></a>
+                    {% else %}
+                        <span class="badge border border-primary text-primary"><i class="fas fa-wallet mr-1"></i>Ví: <b>0đ</b></span>
+                        <a href="{{ url_for('login') }}" class="badge border border-danger text-danger"><i class="fas fa-sign-in-alt mr-1"></i><b>Đăng nhập</b></a>
+                    {% endif %}
+                </div>
+            </nav>
         </div>
-    </aside>
+    </div>
 
-    <div class="sidebar-overlay" id="sidebarOverlay"></div>
-
-    <div class="main-area">
-        <header class="topbar">
-            <button class="topbar-toggle" id="sidebarToggle" aria-label="Mở menu">
-                <span></span><span></span><span></span>
-            </button>
-            <span class="topbar-title">{{ self.title() }}</span>
-        </header>
-
-        <div class="content-container">
+    <!-- ============ NỘI DUNG ============ -->
+    <div class="content-page">
+        <div class="container-fluid">
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
                     {% for category, message in messages %}
@@ -79,21 +165,32 @@
         </div>
     </div>
 
+    <footer class="iq-footer">
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-lg-6"><span class="text-muted small">© {{ cfg.site_name or "CloudShop" }} — Giao code tự động 24/7</span></div>
+                <div class="col-lg-6 text-right"><span class="text-muted small">RedFinger · UGPhone · VIPPlayer · GenPlay · VMOS</span></div>
+            </div>
+        </div>
+    </footer>
 </div>
 
-<script>
-    (function() {
-        var sidebar = document.getElementById('sidebar');
-        var overlay = document.getElementById('sidebarOverlay');
-        var toggle  = document.getElementById('sidebarToggle');
-        function close() { sidebar.classList.remove('open'); overlay.classList.remove('show'); }
-        function open()  { sidebar.classList.add('open'); overlay.classList.add('show'); }
-        toggle.addEventListener('click', function() {
-            sidebar.classList.contains('open') ? close() : open();
-        });
-        overlay.addEventListener('click', close);
-    })();
-</script>
+<div class="mobile-bottom-bar">
+    <a href="{{ url_for('wallet') if current_user else url_for('login') }}">
+        <div><i class="fas fa-wallet"></i></div>
+        <div class="small font-weight-bold">
+            {% if current_user %}{{ "{:,}".format(current_user.balance) }}đ{% else %}Đăng nhập{% endif %}
+        </div>
+    </a>
+    <a href="{{ url_for('home') }}">
+        <div style="font-size:1.3rem;">☁️</div>
+        <div class="small font-weight-bold">Trang chủ</div>
+    </a>
+    <a href="{{ url_for('orders') if current_user else url_for('login') }}">
+        <div><i class="fas fa-receipt"></i></div>
+        <div class="small font-weight-bold">Đơn hàng</div>
+    </a>
+</div>
 
 </body>
 </html>

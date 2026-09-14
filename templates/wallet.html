@@ -3,40 +3,61 @@
 {% block content %}
 
 <h4 class="mb-3">💰 Ví của tôi</h4>
+
 <div class="card p-4 mb-4">
-    <div class="row align-items-center">
-        <div class="col-md-6">
-            <p class="mb-1 text-muted">Số dư hiện tại</p>
-            <h2 class="text-success">{{ "{:,}".format(u.balance) }} đ</h2>
+    <div class="row">
+        <div class="col-md-6 mb-3 info-field">
+            <label>Số dư hiện tại</label>
+            <div class="info-value" style="font-size:1.3rem;font-weight:700;color:#2D11FE;">{{ "{:,}".format(u.balance) }} đ</div>
         </div>
-        <div class="col-md-6 text-center">
-            {% if qr_url %}
-                <img src="{{ qr_url }}" alt="QR nạp tiền" style="max-width:260px;width:100%;border:1px solid #eee;border-radius:8px;">
-                <p class="mt-2 mb-0"><b>Nội dung chuyển khoản (bắt buộc đúng):</b></p>
-                <div class="code-box mt-1">{{ transfer_content }}</div>
-                <p class="text-muted small mt-2">Chuyển khoản bất kỳ số tiền nào với đúng nội dung trên, ví sẽ tự động cộng tiền sau vài giây.</p>
-            {% else %}
-                <p class="text-muted">Hệ thống chưa cấu hình thông tin ngân hàng. Vui lòng liên hệ admin.</p>
-            {% endif %}
+        <div class="col-md-6 mb-3 info-field">
+            <label>Tổng tiền đã nạp</label>
+            <div class="info-value" style="font-size:1.3rem;font-weight:700;">{{ "{:,}".format(total_deposited) }} đ</div>
         </div>
+    </div>
+
+    <hr>
+
+    <div class="text-center">
+        {% if qr_url %}
+            <img src="{{ qr_url }}" alt="QR nạp tiền" style="max-width:260px;width:100%;border:1px solid #eee;border-radius:8px;">
+            <p class="mt-2 mb-0"><b>Nội dung chuyển khoản (bắt buộc đúng):</b></p>
+            <div class="code-box mt-1 d-inline-block">{{ transfer_content }}</div>
+            <p class="text-muted small mt-2">Chuyển khoản bất kỳ số tiền nào với đúng nội dung trên, ví sẽ tự động cộng tiền sau vài giây.</p>
+        {% else %}
+            <p class="text-muted">Hệ thống chưa cấu hình thông tin ngân hàng. Vui lòng liên hệ admin.</p>
+        {% endif %}
     </div>
 </div>
 
-<h5>📜 Lịch sử đơn hàng gần đây</h5>
+<h5 class="mb-3">📜 Lịch sử đơn hàng gần đây</h5>
 {% if orders %}
-<table class="table table-bordered bg-white">
-    <thead><tr><th>Thời gian</th><th>Sản phẩm</th><th>Giá</th><th>Mã nhận được</th></tr></thead>
-    <tbody>
+<div class="row">
     {% for o in orders %}
-        <tr>
-            <td>{{ o.created_at.strftime("%d/%m/%Y %H:%M") }}</td>
-            <td>{{ o.product_name }}</td>
-            <td>{{ "{:,}".format(o.price) }}đ</td>
-            <td><span class="code-box">{{ o.code }}</span></td>
-        </tr>
+    <div class="col-lg-6 mb-3">
+        <div class="card p-3">
+            <div class="row">
+                <div class="col-6 info-field mb-2">
+                    <label>Sản phẩm</label>
+                    <div class="info-value">{{ o.product_name }}</div>
+                </div>
+                <div class="col-6 info-field mb-2">
+                    <label>Thanh toán</label>
+                    <div class="info-value">{{ "{:,}".format(o.price) }}đ</div>
+                </div>
+                <div class="col-6 info-field mb-0">
+                    <label>Thời gian</label>
+                    <div class="info-value">{{ o.created_at.strftime("%d/%m/%Y %H:%M") }}</div>
+                </div>
+                <div class="col-6 info-field mb-0">
+                    <label>Mã nhận được</label>
+                    <div class="code-box" style="font-size:.78rem;">{{ o.code }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
     {% endfor %}
-    </tbody>
-</table>
+</div>
 {% else %}
 <p class="text-muted">Chưa có đơn hàng nào.</p>
 {% endif %}
