@@ -57,6 +57,14 @@ BRANDS = {
     "vmos":      "VMOS",
 }
 
+BRAND_ICONS = {
+    "redfinger": "fas fa-fingerprint",
+    "ugphone":   "fas fa-mobile-alt",
+    "vipplayer": "fas fa-crown",
+    "genplay":   "fas fa-gamepad",
+    "vmos":      "fas fa-cloud",
+}
+
 def get_config():
     cfg = col_config.find_one({"_id": "main"})
     if not cfg:
@@ -106,6 +114,8 @@ def inject_globals():
         "current_user": current_user(),
         "cfg": get_config(),
         "brands": BRANDS,
+        "brand_icons": BRAND_ICONS,
+        "brand_counts": {b: col_products.count_documents({"brand": b, "enabled": True}) for b in BRANDS},
     }
 
 
@@ -172,18 +182,15 @@ def get_recent_activity(limit=15):
 @app.route("/")
 def home():
     products_by_brand = {}
-    brand_counts = {}
     for b in BRANDS:
         items = list(col_products.find({"brand": b, "enabled": True}).sort("price", 1))
         for it in items:
             it["stock_count"] = col_stock.count_documents({"product_id": it["_id"], "sold": False})
         products_by_brand[b] = items
-        brand_counts[b] = len(items)
 
     recent_orders, recent_recharges = get_recent_activity()
     return render_template("home.html",
                             products_by_brand=products_by_brand,
-                            brand_counts=brand_counts,
                             recent_orders=recent_orders,
                             recent_recharges=recent_recharges)
 
@@ -275,7 +282,16 @@ def wallet():
         qr_url  = (f"https://img.vietqr.io/image/{cfg['bank_bin']}-"
                    f"{cfg['bank_account_number']}-qr_only.jpg?{params}")
     orders = list(col_orders.find({"user_id": u["_id"]}).sort("created_at", -1).limit(20))
-    return render_template("wallet.html", u=u, qr_url=qr_url,
+
+    total_deposited = 0
+    agg = list(col_recharges.aggregate([
+        {"$match": {"user_id": u["_id"]}},
+        {"$group": {"_id": None, "total": {"$sum": "$amount"}}},
+    ]))
+    if agg:
+        total_deposited = agg[0]["total"]
+
+    return render_template("wallet.html", u=u, qr_url=qr_url, total_deposited=total_deposited,
                             transfer_content=f"NAPU{u['_id']}", orders=orders)
 
 
@@ -507,4 +523,6 @@ def admin_settings():
 # ══════════════════════════════════════════════════════════════
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)
+    from waitress import serve
+    print(f"🚀 Chạy production server (waitress) tại cổng {port}")
+    serve(app, host="0.0.0.0", port=port)
