@@ -1,0 +1,274 @@
+/* ══════════════════════════════════════════════════════════════
+   CLOUDSHOP THEME — "Device Online" visual language
+   Grounded in the product itself: cloud phones / virtual devices.
+   Two functional accents only — teal = live/available, coral = alert.
+   ══════════════════════════════════════════════════════════════ */
+
+:root {
+    --ink:      #0B1220;
+    --panel:    #121A2B;
+    --panel-2:  #1B2740;
+    --line:     #26324A;
+    --text:     #E7ECF6;
+    --muted:    #8996B0;
+    --signal:   #34E0C4;
+    --signal-dim: rgba(52, 224, 196, .14);
+    --alert:    #FF8A5B;
+    --alert-dim: rgba(255, 138, 91, .14);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    background: var(--ink);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, sans-serif;
+    font-size: 15px;
+}
+
+h1, h2, h3, h4, h5, .display-title {
+    font-family: 'Space Grotesk', 'Inter', sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text);
+}
+
+a { color: var(--signal); text-decoration: none; }
+a:hover { color: var(--text); }
+
+.container { max-width: 1080px; }
+
+/* ── Admin status bar — terminal readout, not a generic banner ── */
+.admin-bar {
+    background: #060A12;
+    border-bottom: 1px solid var(--line);
+    color: var(--muted);
+    font-family: 'Space Grotesk', monospace;
+    font-size: .82rem;
+    padding: 9px 16px;
+    letter-spacing: .02em;
+}
+.admin-bar a { color: var(--signal); margin-right: 18px; }
+.admin-bar a:hover { color: var(--text); }
+
+/* ── Navbar ── */
+.navbar {
+    background: var(--ink) !important;
+    border-bottom: 1px solid var(--line);
+    padding: 16px 0;
+}
+.navbar-brand {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 1.25rem;
+    color: var(--text) !important;
+    letter-spacing: -0.02em;
+}
+.navbar .nav-link, .navbar span.nav-link { color: var(--muted) !important; font-size: .92rem; }
+.navbar .nav-link:hover { color: var(--text) !important; }
+.navbar-toggler { border-color: var(--line); }
+.navbar-toggler-icon { filter: invert(1); }
+
+/* ── Buttons ── */
+.btn {
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    border-radius: 6px;
+    font-size: .92rem;
+    padding: .55rem 1.1rem;
+}
+.btn-primary {
+    background: var(--signal);
+    border-color: var(--signal);
+    color: #06231D;
+}
+.btn-primary:hover, .btn-primary:focus {
+    background: #29c9af;
+    border-color: #29c9af;
+    color: #06231D;
+}
+.btn-primary:disabled { background: var(--panel-2); border-color: var(--line); color: var(--muted); }
+.btn-outline-secondary, .btn-outline-dark {
+    color: var(--muted);
+    border-color: var(--line);
+    background: transparent;
+}
+.btn-outline-secondary:hover, .btn-outline-dark:hover {
+    color: var(--text);
+    border-color: var(--muted);
+    background: var(--panel-2);
+}
+.btn-outline-danger { color: var(--alert); border-color: rgba(255,138,91,.4); background: transparent; }
+.btn-outline-danger:hover { background: var(--alert-dim); border-color: var(--alert); color: var(--alert); }
+.btn-warning {
+    background: transparent;
+    border: 1px solid var(--signal);
+    color: var(--signal);
+    font-weight: 600;
+}
+.btn-warning:hover { background: var(--signal-dim); color: var(--signal); }
+.btn-block { width: 100%; }
+
+/* ── Brand switcher — device-tab strip, not generic pills ── */
+.brand-tabs {
+    border-bottom: 1px solid var(--line);
+    gap: 4px;
+    margin: 28px 0 24px !important;
+    justify-content: flex-start !important;
+}
+.brand-tabs .nav-link {
+    font-family: 'Space Grotesk', monospace;
+    font-size: .85rem;
+    letter-spacing: .03em;
+    color: var(--muted);
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    padding: 10px 4px;
+    margin-right: 22px;
+}
+.brand-tabs .nav-link.active {
+    background: transparent !important;
+    color: var(--signal) !important;
+    border-bottom: 2px solid var(--signal);
+}
+
+/* ── Product card — device-chip style: left accent rail, square corners ── */
+.product-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--signal);
+    border-radius: 4px;
+    box-shadow: none;
+    margin-bottom: 18px;
+    transition: border-color .15s ease, transform .1s ease;
+}
+.product-card:hover { border-color: var(--muted); border-left-color: var(--signal); }
+.product-card.is-out { border-left-color: var(--alert); }
+.product-card .card-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.05rem;
+    color: var(--text);
+}
+.product-card .card-body { padding: 20px; }
+.product-card p.small { color: var(--muted); }
+
+.stock-readout {
+    font-family: 'Space Grotesk', monospace;
+    font-size: .76rem;
+    letter-spacing: .03em;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+}
+.stock-readout .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--signal);
+    box-shadow: 0 0 6px var(--signal);
+}
+.stock-readout.out .dot { background: var(--alert); box-shadow: none; }
+.stock-readout.out { color: var(--alert); }
+
+.price-tag {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--signal);
+    font-variant-numeric: tabular-nums;
+}
+
+.admin-only {
+    background: var(--panel-2) !important;
+    border: 1px dashed var(--line) !important;
+    border-radius: 4px;
+}
+
+/* ── Cards (auth, wallet, generic) ── */
+.card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    color: var(--text);
+}
+.card .text-muted { color: var(--muted) !important; }
+
+/* ── Forms ── */
+label { color: var(--muted); font-size: .85rem; font-weight: 600; }
+.form-control, select.form-control, textarea.form-control {
+    background: var(--ink);
+    border: 1px solid var(--line);
+    color: var(--text);
+    border-radius: 4px;
+}
+.form-control:focus {
+    background: var(--ink);
+    border-color: var(--signal);
+    color: var(--text);
+    box-shadow: 0 0 0 3px var(--signal-dim);
+}
+.form-control::placeholder { color: #576079; }
+
+/* ── Tables ── */
+.table { color: var(--text); }
+.table thead th {
+    font-family: 'Space Grotesk', monospace;
+    font-size: .74rem;
+    letter-spacing: .04em;
+    color: var(--muted);
+    border-bottom: 1px solid var(--line);
+    text-transform: uppercase;
+    background: transparent;
+}
+.table td, .table th { border-color: var(--line); vertical-align: middle; }
+.table-bordered { border-color: var(--line); }
+.table-bordered td, .table-bordered th { border-color: var(--line); }
+.bg-white { background: var(--panel) !important; }
+
+/* ── Badges ── */
+.badge { font-family: 'Space Grotesk', monospace; font-weight: 600; letter-spacing: .02em; border-radius: 3px; }
+.badge-success { background: var(--signal-dim); color: var(--signal); }
+.badge-secondary { background: var(--panel-2); color: var(--muted); }
+.badge-warning { background: var(--signal-dim); color: var(--signal); }
+
+/* ── Alerts ── */
+.alert { border-radius: 4px; border: 1px solid; font-size: .9rem; }
+.alert-success { background: var(--signal-dim); border-color: rgba(52,224,196,.3); color: var(--signal); }
+.alert-danger { background: var(--alert-dim); border-color: rgba(255,138,91,.3); color: var(--alert); }
+
+/* ── Code box (topup content / delivered code) ── */
+.code-box {
+    font-family: 'Space Grotesk', monospace;
+    background: var(--ink);
+    border: 1px solid var(--line);
+    color: var(--signal);
+    padding: 10px 14px;
+    border-radius: 4px;
+    word-break: break-all;
+    font-size: .92rem;
+}
+
+/* ── Hero ── */
+.hero {
+    padding: 44px 0 8px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 4px;
+}
+.hero-eyebrow {
+    font-family: 'Space Grotesk', monospace;
+    font-size: .78rem;
+    letter-spacing: .04em;
+    color: var(--signal);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+.hero-eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 6px var(--signal); }
+.hero h1 { font-size: 2.1rem; margin-bottom: 8px; }
+.hero p.lead { color: var(--muted); font-size: 1rem; max-width: 560px; }
+
+@media (max-width: 767px) {
+    .hero h1 { font-size: 1.6rem; }
+    .admin-bar { overflow-x: auto; white-space: nowrap; }
+}
