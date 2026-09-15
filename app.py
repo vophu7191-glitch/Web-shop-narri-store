@@ -185,7 +185,10 @@ def home():
     for b in BRANDS:
         items = list(col_products.find({"brand": b, "enabled": True}).sort("price", 1))
         for it in items:
-            it["stock_count"] = col_stock.count_documents({"product_id": it["_id"], "sold": False})
+            if it.get("fulfillment", "auto") == "manual":
+                it["stock_count"] = None  # không cần tồn kho, luôn nhận đơn
+            else:
+                it["stock_count"] = col_stock.count_documents({"product_id": it["_id"], "sold": False})
         products_by_brand[b] = items
 
     recent_orders, recent_recharges = get_recent_activity()
@@ -358,7 +361,42 @@ def buy(product_id):
         flash("Số dư ví không đủ. Vui lòng nạp thêm tiền.", "error")
         return redirect(url_for("wallet"))
 
-    # Lấy nguyên tử 1 code chưa bán (tránh 2 người mua trúng cùng 1 code)
+    fulfillment = p.get("fulfillment", "auto")
+    customer_note = request.form.get("note", "").strip()[:500]
+
+    if fulfillment == "manual":
+        # Bán xoay vốn — không cần tồn kho, trừ tiền trước rồi admin xử lý và giao tay sau
+        charged = col_users.find_one_and_update(
+            {"_id": u["_id"], "balance": {"$gte": p["price"]}},
+            {"$inc": {"balance": -p["price"]}},
+            return_document=ReturnDocument.AFTER,
+        )
+        if not charged:
+            flash("Số dư ví không đủ. Vui lòng nạp thêm tiền.", "error")
+            return redirect(url_for("wallet"))
+
+        order_id = uuid.uuid4().hex[:12]
+        col_orders.insert_one({
+            "_id": order_id,
+            "user_id": u["_id"],
+            "product_id": product_id,
+            "product_name": p["name"],
+            "brand": p["brand"],
+            "price": p["price"],
+            "fulfillment": "manual",
+            "status": "pending",
+            "code": "",
+            "account_info": "",
+            "account_password": "",
+            "admin_note": "",
+            "customer_note": customer_note,
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
+        })
+        flash("Đặt hàng thành công! Đơn của bạn đang chờ admin xử lý, vui lòng theo dõi ở mục Đơn hàng.", "success")
+        return redirect(url_for("orders"))
+
+    # ---- Kiểu "auto" (mặc định) — trừ kho có sẵn như cũ ----
     code_doc = col_stock.find_one_and_update(
         {"product_id": product_id, "sold": False},
         {"$set": {"sold": True, "sold_to": u["_id"], "sold_at": datetime.now(timezone.utc)}},
@@ -368,7 +406,6 @@ def buy(product_id):
         flash("Sản phẩm tạm hết hàng, vui lòng quay lại sau.", "error")
         return redirect(url_for("home"))
 
-    # Trừ tiền (nếu vì lý do gì đó user không đủ tiền tại đúng thời điểm này -> hoàn code lại kho)
     charged = col_users.find_one_and_update(
         {"_id": u["_id"], "balance": {"$gte": p["price"]}},
         {"$inc": {"balance": -p["price"]}},
@@ -388,8 +425,11 @@ def buy(product_id):
         "product_name": p["name"],
         "brand": p["brand"],
         "price": p["price"],
+        "fulfillment": "auto",
+        "status": "completed",
         "code": code_doc["code"],
         "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
     })
     flash(f"Mua thành công! Mã của bạn: {code_doc['code']}", "success")
     return redirect(url_for("orders"))
@@ -416,6 +456,10 @@ def admin_products():
         name  = request.form.get("name", "").strip()
         price = request.form.get("price", "0")
         desc  = request.form.get("description", "").strip()
+        fulfillment = request.form.get("fulfillment", "auto")
+        image_url = request.form.get("image_url", "").strip()
+        if fulfillment not in ("auto", "manual"):
+            fulfillment = "auto"
         if brand not in BRANDS or not name or not price.isdigit() or int(price) <= 0:
             flash("Thông tin sản phẩm không hợp lệ.", "error")
         else:
@@ -423,6 +467,7 @@ def admin_products():
                 "_id": uuid.uuid4().hex[:10],
                 "brand": brand, "name": name, "price": int(price),
                 "description": desc, "enabled": True,
+                "fulfillment": fulfillment, "image_url": image_url,
                 "created_at": datetime.now(timezone.utc),
             })
             flash(f"Đã thêm sản phẩm: {name}", "success")
@@ -430,7 +475,10 @@ def admin_products():
 
     items = list(col_products.find().sort([("brand", 1), ("price", 1)]))
     for it in items:
-        it["stock_count"] = col_stock.count_documents({"product_id": it["_id"], "sold": False})
+        if it.get("fulfillment", "auto") == "manual":
+            it["stock_count"] = None
+        else:
+            it["stock_count"] = col_stock.count_documents({"product_id": it["_id"], "sold": False})
     return render_template("admin_products.html", items=items)
 
 
@@ -482,6 +530,41 @@ def admin_orders():
     items = list(col_orders.find().sort("created_at", -1).limit(200))
     users = {u["_id"]: u["username"] for u in col_users.find({}, {"username": 1})}
     return render_template("admin_orders.html", orders=items, users=users)
+
+
+@app.route("/admin/orders/<order_id>/update", methods=["GET", "POST"])
+@admin_required
+def admin_order_update(order_id):
+    o = col_orders.find_one({"_id": order_id})
+    if not o:
+        flash("Đơn hàng không tồn tại.", "error")
+        return redirect(url_for("admin_orders"))
+
+    if request.method == "POST":
+        new_status = request.form.get("status", o.get("status", "pending"))
+        account_info = request.form.get("account_info", "").strip()
+        account_password = request.form.get("account_password", "").strip()
+        admin_note = request.form.get("admin_note", "").strip()
+
+        update = {
+            "status": new_status,
+            "account_info": account_info,
+            "account_password": account_password,
+            "admin_note": admin_note,
+            "updated_at": datetime.now(timezone.utc),
+        }
+
+        # Huỷ đơn (chưa từng huỷ trước đó) -> tự động hoàn tiền lại ví khách
+        if new_status == "cancelled" and o.get("status") != "cancelled":
+            col_users.update_one({"_id": o["user_id"]}, {"$inc": {"balance": o["price"]}})
+            flash(f"Đã huỷ đơn và hoàn {o['price']:,}đ vào ví khách.", "success")
+        else:
+            flash("Đã cập nhật đơn hàng.", "success")
+
+        col_orders.update_one({"_id": order_id}, {"$set": update})
+        return redirect(url_for("admin_orders"))
+
+    return render_template("admin_order_update.html", o=o)
 
 
 @app.route("/admin/users", methods=["GET", "POST"])
