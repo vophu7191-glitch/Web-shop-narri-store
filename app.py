@@ -42,12 +42,14 @@ col_stock     = db["stock_codes"]
 col_orders    = db["orders"]
 col_config    = db["config"]
 col_recharges = db["recharges"]
+col_activity  = db["activity_log"]
 
 # Index cơ bản (an toàn khi gọi lại nhiều lần, chỉ tạo nếu chưa có)
 col_users.create_index("username", unique=True)
 col_stock.create_index([("product_id", 1), ("sold", 1)])
 col_orders.create_index([("user_id", 1), ("created_at", -1)])
 col_recharges.create_index([("created_at", -1)])
+col_activity.create_index([("created_at", -1)])
 
 BRANDS = {
     "redfinger": "RedFinger",
@@ -107,6 +109,18 @@ def admin_required(f):
             return redirect(url_for("home"))
         return f(*a, **kw)
     return wrapper
+
+
+def log_activity(user_id, username, content):
+    ip = (request.headers.get("X-Forwarded-For", "") or request.remote_addr or "").split(",")[0].strip()
+    col_activity.insert_one({
+        "_id": uuid.uuid4().hex[:12],
+        "user_id": user_id,
+        "username": username,
+        "content": content,
+        "ip": ip,
+        "created_at": datetime.now(timezone.utc),
+    })
 
 @app.context_processor
 def inject_globals():
@@ -238,6 +252,7 @@ def register():
             "created_at": datetime.now(timezone.utc),
         })
         session["uid"] = uid
+        log_activity(uid, username, "Đăng ký tài khoản mới")
         if is_first_user:
             flash("Đăng ký thành công! Bạn là người đầu tiên nên tự động là Admin.", "success")
         else:
@@ -257,6 +272,7 @@ def login():
             flash("Sai tên đăng nhập hoặc mật khẩu.", "error")
             return render_template("login.html")
         session["uid"] = u["_id"]
+        log_activity(u["_id"], username, "Đăng nhập thành công")
         flash(f"Xin chào {username}!", "success")
         nxt = request.args.get("next") or url_for("home")
         return redirect(nxt)
@@ -296,6 +312,27 @@ def wallet():
 
     return render_template("wallet.html", u=u, qr_url=qr_url, total_deposited=total_deposited,
                             transfer_content=f"NAPU{u['_id']}", orders=orders)
+
+
+@app.route("/account/change-password", methods=["POST"])
+@login_required
+def change_password():
+    u = current_user()
+    old = request.form.get("old_password", "")
+    new = request.form.get("new_password", "")
+    confirm = request.form.get("confirm_password", "")
+
+    if not check_password_hash(u["password_hash"], old):
+        flash("Mật khẩu cũ không đúng.", "error")
+    elif len(new) < 6:
+        flash("Mật khẩu mới phải từ 6 ký tự trở lên.", "error")
+    elif new != confirm:
+        flash("Xác nhận mật khẩu mới không khớp.", "error")
+    else:
+        col_users.update_one({"_id": u["_id"]}, {"$set": {"password_hash": generate_password_hash(new)}})
+        log_activity(u["_id"], u["username"], "Đổi mật khẩu")
+        flash("Đã đổi mật khẩu thành công.", "success")
+    return redirect(url_for("wallet"))
 
 
 @app.route("/sepay-webhook", methods=["POST"])
@@ -565,6 +602,20 @@ def admin_order_update(order_id):
         return redirect(url_for("admin_orders"))
 
     return render_template("admin_order_update.html", o=o)
+
+
+@app.route("/admin/activity")
+@admin_required
+def admin_activity():
+    items = list(col_activity.find().sort("created_at", -1).limit(300))
+    return render_template("admin_activity.html", items=items)
+
+
+@app.route("/admin/recharges")
+@admin_required
+def admin_recharges():
+    items = list(col_recharges.find().sort("created_at", -1).limit(300))
+    return render_template("admin_recharges.html", items=items)
 
 
 @app.route("/admin/users", methods=["GET", "POST"])
