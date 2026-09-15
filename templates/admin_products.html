@@ -7,7 +7,7 @@
 <div class="card p-4 mb-4">
     <h6>➕ Thêm sản phẩm mới</h6>
     <form method="post" class="row">
-        <div class="col-md-3">
+        <div class="col-md-2">
             <label>Thương hiệu</label>
             <select name="brand" class="form-control" required>
                 {% for key, label in brands.items() %}
@@ -15,7 +15,7 @@
                 {% endfor %}
             </select>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
             <label>Tên gói</label>
             <input type="text" name="name" class="form-control" placeholder="VD: Gói 30 ngày VIP" required>
         </div>
@@ -23,19 +23,30 @@
             <label>Giá (VNĐ)</label>
             <input type="number" name="price" class="form-control" min="1" required>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
             <label>Mô tả</label>
             <input type="text" name="description" class="form-control" placeholder="Tuỳ chọn">
         </div>
-        <div class="col-md-1 d-flex align-items-end">
+        <div class="col-md-2">
+            <label>Kiểu bán</label>
+            <select name="fulfillment" class="form-control">
+                <option value="auto">Tự động (trừ kho code)</option>
+                <option value="manual">Thủ công (xoay vốn, admin duyệt tay)</option>
+            </select>
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
             <button class="btn btn-primary btn-block">Thêm</button>
+        </div>
+        <div class="col-md-6 mt-2">
+            <label>Ảnh sản phẩm (URL, tuỳ chọn)</label>
+            <input type="text" name="image_url" class="form-control" placeholder="https://...">
         </div>
     </form>
 </div>
 
 <table class="table table-bordered bg-white">
     <thead>
-        <tr><th>Thương hiệu</th><th>Tên gói</th><th>Giá</th><th>Tồn kho</th><th>Trạng thái</th><th>Thao tác</th></tr>
+        <tr><th>Thương hiệu</th><th>Tên gói</th><th>Giá</th><th>Kiểu bán</th><th>Tồn kho</th><th>Trạng thái</th><th>Thao tác</th></tr>
     </thead>
     <tbody>
     {% for p in items %}
@@ -43,10 +54,19 @@
             <td>{{ brands.get(p.brand, p.brand) }}</td>
             <td>{{ p.name }}</td>
             <td>{{ "{:,}".format(p.price) }}đ</td>
-            <td>{{ p.stock_count }}</td>
+            <td>
+                {% if p.get('fulfillment', 'auto') == 'manual' %}
+                    <span class="badge badge-info">Thủ công</span>
+                {% else %}
+                    <span class="badge badge-light">Tự động</span>
+                {% endif %}
+            </td>
+            <td>{% if p.stock_count is none %}<span class="text-muted">—</span>{% else %}{{ p.stock_count }}{% endif %}</td>
             <td>{% if p.enabled %}<span class="badge badge-success">Đang bán</span>{% else %}<span class="badge badge-secondary">Đã ẩn</span>{% endif %}</td>
             <td>
+                {% if p.get('fulfillment', 'auto') != 'manual' %}
                 <a href="{{ url_for('admin_stock', pid=p._id) }}" class="btn btn-sm btn-outline-dark">📦 Nhập code</a>
+                {% endif %}
                 <form method="post" action="{{ url_for('admin_toggle_product', pid=p._id) }}" class="d-inline">
                     <button class="btn btn-sm btn-outline-secondary">{{ 'Ẩn' if p.enabled else 'Hiện' }}</button>
                 </form>

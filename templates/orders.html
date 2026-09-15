@@ -27,9 +27,36 @@
                     <div class="info-value">{{ o.created_at.strftime("%d/%m/%Y %H:%M") }}</div>
                 </div>
                 <div class="col-6 info-field mb-0">
+                    <label>Trạng thái</label>
+                    <div class="info-value">
+                        {% if o.status == 'pending' %}
+                            <span class="badge badge-warning">Chờ xử lý</span>
+                        {% elif o.status == 'cancelled' %}
+                            <span class="badge badge-danger">Đã huỷ - đã hoàn tiền</span>
+                        {% else %}
+                            <span class="badge badge-success">Hoàn thành</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if o.get('fulfillment') == 'manual' %}
+                    {% if o.status == 'completed' %}
+                    <div class="col-12 info-field mt-2 mb-0">
+                        <label>Tài khoản đã giao</label>
+                        <div class="code-box" style="font-size:.8rem;">{{ o.account_info or '—' }}{% if o.account_password %} / {{ o.account_password }}{% endif %}</div>
+                    </div>
+                    {% if o.admin_note %}
+                    <div class="col-12 info-field mt-2 mb-0">
+                        <label>Ghi chú từ admin</label>
+                        <div class="info-value">{{ o.admin_note }}</div>
+                    </div>
+                    {% endif %}
+                    {% endif %}
+                {% else %}
+                <div class="col-12 info-field mt-2 mb-0">
                     <label>Mã nhận được</label>
                     <div class="code-box" style="font-size:.78rem;">{{ o.code }}</div>
                 </div>
+                {% endif %}
             </div>
         </div>
     </div>

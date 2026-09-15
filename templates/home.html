@@ -35,18 +35,33 @@
             {% for p in items %}
             <div class="col-md-4 col-sm-6 mb-3 product-col">
                 <div class="card product-card h-100">
+                    <div class="product-thumb">
+                        {% if p.image_url %}
+                            <img src="{{ p.image_url }}" alt="{{ p.name }}">
+                        {% else %}
+                            <div class="product-thumb-fallback"><i class="{{ brand_icons.get(p.brand, 'fas fa-mobile-alt') }}"></i></div>
+                        {% endif %}
+                        <span class="product-ribbon">#{{ p._id[:6]|upper }}</span>
+                    </div>
+                    <div class="product-title-bar">{{ p.name }}</div>
                     <div class="card-body d-flex flex-column">
-                        <h6 class="card-title">{{ p.name }}</h6>
                         <p class="text-muted small">{{ p.description }}</p>
                         <div class="mb-2">
-                            <span class="badge badge-{{ 'success' if p.stock_count > 0 else 'secondary' }} stock-badge">
-                                {% if p.stock_count > 0 %}Còn {{ p.stock_count }} code{% else %}Hết hàng{% endif %}
-                            </span>
+                            {% if p.stock_count is none %}
+                                <span class="badge badge-info stock-badge">Nhận đơn — xử lý sau khi mua</span>
+                            {% elif p.stock_count > 0 %}
+                                <span class="badge badge-success stock-badge">Còn {{ p.stock_count }} code</span>
+                            {% else %}
+                                <span class="badge badge-secondary stock-badge">Hết hàng</span>
+                            {% endif %}
                         </div>
-                        <div class="price-tag mb-3">{{ "{:,}".format(p.price) }} đ</div>
+                        <div class="price-box mb-3">{{ "{:,}".format(p.price) }} đ</div>
                         <div class="mt-auto">
                             {% if current_user %}
                                 <form method="post" action="{{ url_for('buy', product_id=p._id) }}" onsubmit="return confirm('Xác nhận mua {{ p.name }} giá {{ '{:,}'.format(p.price) }}đ?');">
+                                    {% if p.get('fulfillment') == 'manual' %}
+                                    <input type="text" name="note" class="form-control form-control-sm mb-2" placeholder="Ghi chú cho đơn (tài khoản game, yêu cầu...)">
+                                    {% endif %}
                                     <button class="btn btn-primary btn-block" {% if p.stock_count == 0 %}disabled{% endif %}>🎫 Mua ngay</button>
                                 </form>
                             {% else %}
@@ -55,7 +70,9 @@
 
                             {% if current_user and current_user.role == 'admin' %}
                             <div class="admin-only mt-2 p-2 rounded d-flex justify-content-between">
+                                {% if p.get('fulfillment') != 'manual' %}
                                 <a href="{{ url_for('admin_stock', pid=p._id) }}" class="btn btn-sm btn-outline-dark">📦 Nhập code</a>
+                                {% endif %}
                                 <form method="post" action="{{ url_for('admin_toggle_product', pid=p._id) }}">
                                     <button class="btn btn-sm btn-outline-secondary">{{ 'Ẩn' if p.enabled else 'Hiện' }}</button>
                                 </form>
@@ -152,7 +169,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var q = (document.getElementById('productSearch').value || '').trim().toLowerCase();
         var anyVisible = false;
         group.querySelectorAll('.product-col').forEach(function (col) {
-            var title = col.querySelector('.card-title').textContent.toLowerCase();
+            var title = col.querySelector('.product-title-bar').textContent.toLowerCase();
             var show = title.indexOf(q) !== -1;
             col.style.display = show ? '' : 'none';
             if (show) anyVisible = true;

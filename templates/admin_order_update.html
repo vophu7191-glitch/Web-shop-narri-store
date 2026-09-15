@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Cập nhật đơn hàng{% endblock %}
+{% block content %}
+
+<h4 class="mb-3">🛠️ Cập nhật đơn hàng #{{ o._id }}</h4>
+
+{% if o.status == 'pending' %}
+<div class="alert alert-warning">Đơn này khách đã thanh toán và đang chờ xử lý. Nhập thông tin tài khoản/ghi chú rồi chuyển trạng thái "Hoàn thành" để báo cho khách.</div>
+{% endif %}
+
+<div class="card p-4">
+    <div class="row">
+        <div class="col-md-4 info-field mb-3">
+            <label>Dịch vụ</label>
+            <div class="info-value">{{ o.product_name }}</div>
+        </div>
+        <div class="col-md-4 info-field mb-3">
+            <label>Mã đơn</label>
+            <div class="info-value">{{ o._id }}</div>
+        </div>
+        <div class="col-md-4 info-field mb-3">
+            <label>Thanh toán</label>
+            <div class="info-value">{{ "{:,}".format(o.price) }} đ</div>
+        </div>
+    </div>
+
+    {% if o.customer_note %}
+    <div class="info-field mb-3">
+        <label>Ghi chú khách</label>
+        <div class="info-value">{{ o.customer_note }}</div>
+    </div>
+    {% endif %}
+
+    <form method="post">
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label>Tài khoản</label>
+                <input type="text" name="account_info" class="form-control" value="{{ o.account_info or '' }}" placeholder="Tài khoản/thông tin giao cho khách">
+            </div>
+            <div class="col-md-6 mb-3">
+                <label>Mật khẩu</label>
+                <input type="text" name="account_password" class="form-control" value="{{ o.account_password or '' }}" placeholder="Mật khẩu (nếu có)">
+            </div>
+        </div>
+        <div class="mb-3">
+            <label>Ghi chú admin</label>
+            <textarea name="admin_note" class="form-control" rows="3" placeholder="Ghi chú nội bộ, khách sẽ nhìn thấy phần này ở trang đơn hàng">{{ o.admin_note or '' }}</textarea>
+        </div>
+        <div class="mb-3">
+            <label>Trạng thái</label>
+            <select name="status" class="form-control">
+                <option value="pending" {% if o.status == 'pending' %}selected{% endif %}>Chờ xử lý</option>
+                <option value="completed" {% if o.status == 'completed' %}selected{% endif %}>Hoàn thành</option>
+                <option value="cancelled" {% if o.status == 'cancelled' %}selected{% endif %}>Huỷ đơn (tự hoàn tiền)</option>
+            </select>
+        </div>
+        <button class="btn btn-primary">Cập nhật</button>
+        <a href="{{ url_for('admin_orders') }}" class="btn btn-secondary">Quay lại</a>
+    </form>
+</div>
+
+{% endblock %}

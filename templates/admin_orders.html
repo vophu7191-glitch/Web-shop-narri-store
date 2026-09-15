@@ -4,8 +4,9 @@
 
 <h4 class="mb-3">📦 Tất cả đơn hàng ({{ orders|length }})</h4>
 
+<div class="table-responsive">
 <table class="table table-bordered bg-white">
-    <thead><tr><th>Thời gian</th><th>Khách hàng</th><th>Sản phẩm</th><th>Giá</th><th>Code đã giao</th></tr></thead>
+    <thead><tr><th>Thời gian</th><th>Khách hàng</th><th>Sản phẩm</th><th>Giá</th><th>Trạng thái</th><th>Code / Tài khoản đã giao</th><th>Thao tác</th></tr></thead>
     <tbody>
     {% for o in orders %}
         <tr>
@@ -13,10 +14,31 @@
             <td>{{ users.get(o.user_id, o.user_id) }}</td>
             <td>{{ o.product_name }}</td>
             <td>{{ "{:,}".format(o.price) }}đ</td>
-            <td class="code-box">{{ o.code }}</td>
+            <td>
+                {% if o.status == 'pending' %}
+                    <span class="badge badge-warning">Chờ xử lý</span>
+                {% elif o.status == 'cancelled' %}
+                    <span class="badge badge-danger">Đã huỷ</span>
+                {% else %}
+                    <span class="badge badge-success">Hoàn thành</span>
+                {% endif %}
+            </td>
+            <td class="code-box">
+                {% if o.get('fulfillment') == 'manual' %}
+                    {{ o.account_info or '—' }}{% if o.account_password %} / {{ o.account_password }}{% endif %}
+                {% else %}
+                    {{ o.code }}
+                {% endif %}
+            </td>
+            <td>
+                {% if o.get('fulfillment') == 'manual' %}
+                <a href="{{ url_for('admin_order_update', order_id=o._id) }}" class="btn btn-sm btn-outline-primary">Xử lý</a>
+                {% endif %}
+            </td>
         </tr>
     {% endfor %}
     </tbody>
 </table>
+</div>
 
 {% endblock %}
