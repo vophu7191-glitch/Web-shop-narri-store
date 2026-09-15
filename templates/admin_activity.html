@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Nhật ký hoạt động{% endblock %}
+{% block content %}
+
+<h4 class="mb-3">🗒️ Nhật ký hoạt động ({{ items|length }})</h4>
+
+<div class="table-responsive">
+<table class="table table-bordered bg-white">
+    <thead><tr><th>Thời gian</th><th>Tài khoản</th><th>Nội dung</th><th>Địa chỉ IP</th></tr></thead>
+    <tbody>
+    {% for a in items %}
+        <tr>
+            <td>{{ a.created_at.strftime("%d/%m/%Y %H:%M:%S") }}</td>
+            <td>{{ a.username }}</td>
+            <td>{{ a.content }}</td>
+            <td>{{ a.ip or '—' }}</td>
+        </tr>
+    {% else %}
+        <tr><td colspan="4" class="text-center text-muted py-4">Chưa có hoạt động nào.</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+
+{% endblock %}

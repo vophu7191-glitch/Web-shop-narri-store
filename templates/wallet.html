@@ -30,6 +30,27 @@
     </div>
 </div>
 
+<div class="card p-4 mb-4">
+    <h5 class="mb-3">🔒 Đổi mật khẩu</h5>
+    <form method="post" action="{{ url_for('change_password') }}">
+        <div class="row">
+            <div class="col-md-4 mb-3">
+                <label class="small text-muted">Mật khẩu cũ</label>
+                <input type="password" name="old_password" class="form-control" required>
+            </div>
+            <div class="col-md-4 mb-3">
+                <label class="small text-muted">Mật khẩu mới</label>
+                <input type="password" name="new_password" class="form-control" minlength="6" required>
+            </div>
+            <div class="col-md-4 mb-3">
+                <label class="small text-muted">Xác nhận mật khẩu mới</label>
+                <input type="password" name="confirm_password" class="form-control" minlength="6" required>
+            </div>
+        </div>
+        <button class="btn btn-primary">Đổi mật khẩu</button>
+    </form>
+</div>
+
 <h5 class="mb-3">📜 Lịch sử đơn hàng gần đây</h5>
 {% if orders %}
 <div class="row">
