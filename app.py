@@ -43,6 +43,7 @@ col_orders    = db["orders"]
 col_config    = db["config"]
 col_recharges = db["recharges"]
 col_activity  = db["activity_log"]
+col_posts     = db["posts"]
 
 # Index cơ bản (an toàn khi gọi lại nhiều lần, chỉ tạo nếu chưa có)
 col_users.create_index("username", unique=True)
@@ -50,6 +51,7 @@ col_stock.create_index([("product_id", 1), ("sold", 1)])
 col_orders.create_index([("user_id", 1), ("created_at", -1)])
 col_recharges.create_index([("created_at", -1)])
 col_activity.create_index([("created_at", -1)])
+col_posts.create_index([("created_at", -1)])
 
 BRANDS = {
     "redfinger": "RedFinger",
@@ -77,6 +79,7 @@ def get_config():
             "bank_account_number": "",
             "bank_account_name": "",
             "site_name": "CloudShop",
+            "announcement": "",
         }
         col_config.insert_one(cfg)
     return cfg
@@ -205,9 +208,14 @@ def home():
                 it["stock_count"] = col_stock.count_documents({"product_id": it["_id"], "sold": False})
         products_by_brand[b] = items
 
+    pinned_products = []
+    for b, items in products_by_brand.items():
+        pinned_products += [p for p in items if p.get("pinned")]
+
     recent_orders, recent_recharges = get_recent_activity()
     return render_template("home.html",
                             products_by_brand=products_by_brand,
+                            pinned_products=pinned_products,
                             recent_orders=recent_orders,
                             recent_recharges=recent_recharges)
 
@@ -223,6 +231,7 @@ def api_activity():
 # ══════════════════════════════════════════════════════════════
 @app.route("/register", methods=["GET", "POST"])
 def register():
+    ref = request.values.get("ref", "").strip()
     if request.method == "POST":
         username = request.form.get("username", "").strip().lower()
         password = request.form.get("password", "")
@@ -230,16 +239,18 @@ def register():
 
         if not re.fullmatch(r"[a-z0-9_]{4,20}", username):
             flash("Tên đăng nhập chỉ gồm chữ thường/số/gạch dưới, 4-20 ký tự.", "error")
-            return render_template("register.html")
+            return render_template("register.html", ref=ref)
         if len(password) < 6:
             flash("Mật khẩu phải từ 6 ký tự trở lên.", "error")
-            return render_template("register.html")
+            return render_template("register.html", ref=ref)
         if password != confirm:
             flash("Mật khẩu xác nhận không khớp.", "error")
-            return render_template("register.html")
+            return render_template("register.html", ref=ref)
         if col_users.find_one({"username": username}):
             flash("Tên đăng nhập đã tồn tại.", "error")
-            return render_template("register.html")
+            return render_template("register.html", ref=ref)
+
+        referrer = col_users.find_one({"_id": ref}) if ref else None
 
         uid = uuid.uuid4().hex[:12]
         is_first_user = col_users.count_documents({}) == 0
@@ -249,17 +260,21 @@ def register():
             "password_hash": generate_password_hash(password),
             "balance": 0,
             "role": "admin" if is_first_user else "user",
+            "referred_by": referrer["_id"] if referrer else None,
             "created_at": datetime.now(timezone.utc),
         })
         session["uid"] = uid
-        log_activity(uid, username, "Đăng ký tài khoản mới")
+        note = "Đăng ký tài khoản mới"
+        if referrer:
+            note += f" (giới thiệu bởi {referrer['username']})"
+        log_activity(uid, username, note)
         if is_first_user:
             flash("Đăng ký thành công! Bạn là người đầu tiên nên tự động là Admin.", "success")
         else:
             flash("Đăng ký thành công! Chào mừng bạn.", "success")
         return redirect(url_for("home"))
 
-    return render_template("register.html")
+    return render_template("register.html", ref=ref)
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -310,8 +325,12 @@ def wallet():
     if agg:
         total_deposited = agg[0]["total"]
 
+    referral_count = col_users.count_documents({"referred_by": u["_id"]})
+    referral_link = request.host_url.rstrip("/") + url_for("register") + f"?ref={u['_id']}"
+
     return render_template("wallet.html", u=u, qr_url=qr_url, total_deposited=total_deposited,
-                            transfer_content=f"NAPU{u['_id']}", orders=orders)
+                            transfer_content=f"NAPU{u['_id']}", orders=orders,
+                            referral_count=referral_count, referral_link=referral_link)
 
 
 @app.route("/account/change-password", methods=["POST"])
@@ -480,6 +499,21 @@ def orders():
     return render_template("orders.html", orders=items)
 
 
+@app.route("/orders/<order_id>/invoice")
+@login_required
+def invoice(order_id):
+    u = current_user()
+    o = col_orders.find_one({"_id": order_id})
+    if not o:
+        flash("Đơn hàng không tồn tại.", "error")
+        return redirect(url_for("orders"))
+    if o["user_id"] != u["_id"] and u.get("role") != "admin":
+        flash("Bạn không có quyền xem hoá đơn này.", "error")
+        return redirect(url_for("orders"))
+    buyer = col_users.find_one({"_id": o["user_id"]}, {"username": 1})
+    return render_template("invoice.html", o=o, buyer=buyer)
+
+
 # ══════════════════════════════════════════════════════════════
 #  ADMIN — cùng giao diện khách, chỉ hiện thêm cho role=admin
 #  (các route dưới đây tự chặn bằng admin_required, không lộ
@@ -495,6 +529,7 @@ def admin_products():
         desc  = request.form.get("description", "").strip()
         fulfillment = request.form.get("fulfillment", "auto")
         image_url = request.form.get("image_url", "").strip()
+        pinned = request.form.get("pinned") == "1"
         if fulfillment not in ("auto", "manual"):
             fulfillment = "auto"
         if brand not in BRANDS or not name or not price.isdigit() or int(price) <= 0:
@@ -503,7 +538,7 @@ def admin_products():
             col_products.insert_one({
                 "_id": uuid.uuid4().hex[:10],
                 "brand": brand, "name": name, "price": int(price),
-                "description": desc, "enabled": True,
+                "description": desc, "enabled": True, "pinned": pinned,
                 "fulfillment": fulfillment, "image_url": image_url,
                 "created_at": datetime.now(timezone.utc),
             })
@@ -525,6 +560,15 @@ def admin_toggle_product(pid):
     p = col_products.find_one({"_id": pid})
     if p:
         col_products.update_one({"_id": pid}, {"$set": {"enabled": not p.get("enabled", True)}})
+    return redirect(url_for("admin_products"))
+
+
+@app.route("/admin/products/<pid>/pin", methods=["POST"])
+@admin_required
+def admin_pin_product(pid):
+    p = col_products.find_one({"_id": pid})
+    if p:
+        col_products.update_one({"_id": pid}, {"$set": {"pinned": not p.get("pinned", False)}})
     return redirect(url_for("admin_products"))
 
 
@@ -618,6 +662,26 @@ def admin_recharges():
     return render_template("admin_recharges.html", items=items)
 
 
+@app.route("/admin/referrals")
+@admin_required
+def admin_referrals():
+    agg = list(col_users.aggregate([
+        {"$match": {"referred_by": {"$ne": None}}},
+        {"$group": {"_id": "$referred_by", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+    ]))
+    referrer_map = {u["_id"]: u["username"]
+                    for u in col_users.find({"_id": {"$in": [a["_id"] for a in agg]}}, {"username": 1})}
+    top_referrers = [{"username": referrer_map.get(a["_id"], a["_id"]), "count": a["count"]} for a in agg]
+
+    referred_users = list(col_users.find({"referred_by": {"$ne": None}}).sort("created_at", -1).limit(200))
+    for r in referred_users:
+        parent = col_users.find_one({"_id": r["referred_by"]}, {"username": 1})
+        r["referrer_name"] = parent["username"] if parent else r["referred_by"]
+
+    return render_template("admin_referrals.html", top_referrers=top_referrers, referred_users=referred_users)
+
+
 @app.route("/admin/users", methods=["GET", "POST"])
 @admin_required
 def admin_users():
@@ -637,6 +701,41 @@ def admin_users():
     return render_template("admin_users.html", items=items)
 
 
+@app.route("/tin-tuc")
+def posts():
+    items = list(col_posts.find().sort("created_at", -1).limit(50))
+    return render_template("posts.html", items=items)
+
+
+@app.route("/admin/posts", methods=["GET", "POST"])
+@admin_required
+def admin_posts():
+    if request.method == "POST":
+        title = request.form.get("title", "").strip()
+        content = request.form.get("content", "").strip()
+        if not title or not content:
+            flash("Vui lòng nhập đủ tiêu đề và nội dung.", "error")
+        else:
+            col_posts.insert_one({
+                "_id": uuid.uuid4().hex[:10],
+                "title": title, "content": content,
+                "created_at": datetime.now(timezone.utc),
+            })
+            flash("Đã đăng bài viết.", "success")
+        return redirect(url_for("admin_posts"))
+
+    items = list(col_posts.find().sort("created_at", -1))
+    return render_template("admin_posts.html", items=items)
+
+
+@app.route("/admin/posts/<post_id>/delete", methods=["POST"])
+@admin_required
+def admin_delete_post(post_id):
+    col_posts.delete_one({"_id": post_id})
+    flash("Đã xoá bài viết.", "success")
+    return redirect(url_for("admin_posts"))
+
+
 @app.route("/admin/settings", methods=["GET", "POST"])
 @admin_required
 def admin_settings():
@@ -647,6 +746,7 @@ def admin_settings():
             "bank_bin":            request.form.get("bank_bin", "").strip(),
             "bank_account_number": request.form.get("bank_account_number", "").strip(),
             "bank_account_name":   request.form.get("bank_account_name", "").strip(),
+            "announcement":        request.form.get("announcement", "").strip(),
         }}, upsert=True)
         flash("Đã lưu cấu hình.", "success")
         return redirect(url_for("admin_settings"))
