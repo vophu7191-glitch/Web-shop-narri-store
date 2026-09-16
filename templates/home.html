@@ -2,11 +2,44 @@
 {% block title %}Trang chủ{% endblock %}
 {% block content %}
 
+{% if cfg.announcement %}
+<div class="alert alert-warning" role="alert">📢 {{ cfg.announcement }}</div>
+{% endif %}
+
 <div class="col-lg-12 mb-3">
     <div class="alert text-white" style="background:#2D11FE;" role="alert">
         <marquee>Chào mừng bạn đến với {{ cfg.site_name or "CloudShop" }} — RedFinger · UGPhone · VIPPlayer · GenPlay · VMOS — Giao code tự động sau khi thanh toán</marquee>
     </div>
 </div>
+
+{% if pinned_products %}
+<div class="card mb-3">
+    <div class="card-body">
+        <h6 class="mb-3">📌 Sản phẩm nổi bật</h6>
+        <div class="row">
+            {% for p in pinned_products %}
+            <div class="col-md-4 col-sm-6 mb-3 product-col">
+                <div class="card product-card h-100">
+                    <div class="product-thumb">
+                        {% if p.image_url %}
+                            <img src="{{ p.image_url }}" alt="{{ p.name }}">
+                        {% else %}
+                            <div class="product-thumb-fallback"><i class="{{ brand_icons.get(p.brand, 'fas fa-mobile-alt') }}"></i></div>
+                        {% endif %}
+                        <span class="product-ribbon">{{ brands.get(p.brand, p.brand) }}</span>
+                    </div>
+                    <div class="product-title-bar">{{ p.name }}</div>
+                    <div class="card-body d-flex flex-column">
+                        <div class="price-box mb-3">{{ "{:,}".format(p.price) }} đ</div>
+                        <a href="{{ url_for('home') }}#brand-{{ p.brand }}" class="btn btn-outline-primary btn-block btn-sm">Xem chi tiết</a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <div class="card">
     <div class="card-body">

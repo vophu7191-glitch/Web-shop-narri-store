@@ -37,9 +37,15 @@
         <div class="col-md-2 d-flex align-items-end">
             <button class="btn btn-primary btn-block">Thêm</button>
         </div>
-        <div class="col-md-6 mt-2">
+        <div class="col-md-4 mt-2">
             <label>Ảnh sản phẩm (URL, tuỳ chọn)</label>
             <input type="text" name="image_url" class="form-control" placeholder="https://...">
+        </div>
+        <div class="col-md-2 mt-2 d-flex align-items-center">
+            <div class="custom-control custom-checkbox">
+                <input type="checkbox" class="custom-control-input" id="pinnedCheck" name="pinned" value="1">
+                <label class="custom-control-label" for="pinnedCheck">📌 Ghim nổi bật</label>
+            </div>
         </div>
     </form>
 </div>
@@ -52,7 +58,7 @@
     {% for p in items %}
         <tr>
             <td>{{ brands.get(p.brand, p.brand) }}</td>
-            <td>{{ p.name }}</td>
+            <td>{% if p.pinned %}📌 {% endif %}{{ p.name }}</td>
             <td>{{ "{:,}".format(p.price) }}đ</td>
             <td>
                 {% if p.get('fulfillment', 'auto') == 'manual' %}
@@ -67,6 +73,9 @@
                 {% if p.get('fulfillment', 'auto') != 'manual' %}
                 <a href="{{ url_for('admin_stock', pid=p._id) }}" class="btn btn-sm btn-outline-dark">📦 Nhập code</a>
                 {% endif %}
+                <form method="post" action="{{ url_for('admin_pin_product', pid=p._id) }}" class="d-inline">
+                    <button class="btn btn-sm btn-outline-warning">{{ 'Bỏ ghim' if p.pinned else '📌 Ghim' }}</button>
+                </form>
                 <form method="post" action="{{ url_for('admin_toggle_product', pid=p._id) }}" class="d-inline">
                     <button class="btn btn-sm btn-outline-secondary">{{ 'Ẩn' if p.enabled else 'Hiện' }}</button>
                 </form>

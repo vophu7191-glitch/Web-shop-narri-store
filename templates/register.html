@@ -6,6 +6,8 @@
         <div class="card p-4">
             <h4 class="mb-3 text-center">Đăng ký tài khoản</h4>
             <form method="post">
+                <input type="hidden" name="ref" value="{{ ref or '' }}">
+                {% if ref %}<div class="alert alert-info py-2 small">Bạn đang đăng ký qua lời mời giới thiệu.</div>{% endif %}
                 <div class="form-group">
                     <label>Tên đăng nhập</label>
                     <input type="text" name="username" class="form-control" placeholder="chữ thường, số, gạch dưới" required autofocus>

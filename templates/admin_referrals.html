@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Tiếp thị liên kết{% endblock %}
+{% block content %}
+
+<h4 class="mb-3">🔗 Tiếp thị liên kết</h4>
+<p class="text-muted small">Chỉ theo dõi ai giới thiệu ai — hệ thống chưa tự tính hoa hồng, admin tự cộng thưởng thủ công qua trang Quản lý thành viên nếu muốn.</p>
+
+<h6 class="mb-2">🏆 Top người giới thiệu</h6>
+<div class="table-responsive mb-4">
+<table class="table table-bordered bg-white">
+    <thead><tr><th>Tài khoản</th><th>Số người đã giới thiệu</th></tr></thead>
+    <tbody>
+    {% for r in top_referrers %}
+        <tr><td>{{ r.username }}</td><td>{{ r.count }}</td></tr>
+    {% else %}
+        <tr><td colspan="2" class="text-center text-muted py-4">Chưa có lượt giới thiệu nào.</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+
+<h6 class="mb-2">📋 Danh sách đăng ký qua giới thiệu</h6>
+<div class="table-responsive">
+<table class="table table-bordered bg-white">
+    <thead><tr><th>Thời gian</th><th>Tài khoản mới</th><th>Được giới thiệu bởi</th></tr></thead>
+    <tbody>
+    {% for u in referred_users %}
+        <tr>
+            <td>{{ u.created_at.strftime("%d/%m/%Y %H:%M") }}</td>
+            <td>{{ u.username }}</td>
+            <td>{{ u.referrer_name }}</td>
+        </tr>
+    {% else %}
+        <tr><td colspan="3" class="text-center text-muted py-4">Chưa có ai đăng ký qua giới thiệu.</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+
+{% endblock %}

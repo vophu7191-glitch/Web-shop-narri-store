@@ -52,6 +52,10 @@
             .mobile-bottom-bar{ display:flex; }
             .content-page{ padding-bottom:66px; }
         }
+        @media print {
+            .iq-sidebar, .iq-top-navbar, .iq-footer, .mobile-bottom-bar, .no-print { display:none !important; }
+            .content-page { padding:0 !important; margin-left:0 !important; }
+        }
     </style>
     {% block extra_head %}{% endblock %}
 </head>
@@ -120,15 +124,24 @@
                         <a href="{{ url_for('wallet') }}" class="svg-icon"><i class="fas fa-wallet"></i><span class="ml-2">Nạp tiền / Ví</span></a>
                     </li>
                     {% endif %}
+                    <li class="sidebar-layout">
+                        <a href="{{ url_for('posts') }}" class="svg-icon"><i class="fas fa-newspaper"></i><span class="ml-2">Tin tức</span></a>
+                    </li>
 
                     {% if current_user and current_user.role == 'admin' %}
-                    <li class="px-3 pt-3 pb-2"><span class="text-uppercase small font-weight-bold text-white">Quản trị</span></li>
-                    <li class="sidebar-layout"><a href="{{ url_for('admin_products') }}" class="svg-icon"><i class="fas fa-box"></i><span class="ml-2">Quản lý sản phẩm</span></a></li>
-                    <li class="sidebar-layout"><a href="{{ url_for('admin_orders') }}" class="svg-icon"><i class="fas fa-receipt"></i><span class="ml-2">Tất cả đơn hàng</span></a></li>
-                    <li class="sidebar-layout"><a href="{{ url_for('admin_users') }}" class="svg-icon"><i class="fas fa-users-cog"></i><span class="ml-2">Quản lý người dùng</span></a></li>
-                    <li class="sidebar-layout"><a href="{{ url_for('admin_settings') }}" class="svg-icon"><i class="fas fa-cogs"></i><span class="ml-2">Cấu hình hệ thống</span></a></li>
+                    <li class="px-3 pt-3 pb-2"><span class="text-uppercase small font-weight-bold text-white">Hệ thống</span></li>
+                    <li class="sidebar-layout"><a href="{{ url_for('admin_settings') }}" class="svg-icon"><i class="fas fa-cogs"></i><span class="ml-2">Cấu hình &amp; API Keys</span></a></li>
+                    <li class="sidebar-layout"><a href="{{ url_for('admin_products') }}" class="svg-icon"><i class="fas fa-box"></i><span class="ml-2">Sản phẩm &amp; kho hàng</span></a></li>
+
+                    <li class="px-3 pt-3 pb-2"><span class="text-uppercase small font-weight-bold text-white">Người dùng</span></li>
+                    <li class="sidebar-layout"><a href="{{ url_for('admin_users') }}" class="svg-icon"><i class="fas fa-users-cog"></i><span class="ml-2">Quản lý thành viên</span></a></li>
                     <li class="sidebar-layout"><a href="{{ url_for('admin_recharges') }}" class="svg-icon"><i class="fas fa-money-check-alt"></i><span class="ml-2">Lịch sử nạp tiền</span></a></li>
                     <li class="sidebar-layout"><a href="{{ url_for('admin_activity') }}" class="svg-icon"><i class="fas fa-clipboard-list"></i><span class="ml-2">Nhật ký hoạt động</span></a></li>
+                    <li class="sidebar-layout"><a href="{{ url_for('admin_referrals') }}" class="svg-icon"><i class="fas fa-user-friends"></i><span class="ml-2">Tiếp thị liên kết</span></a></li>
+
+                    <li class="px-3 pt-3 pb-2"><span class="text-uppercase small font-weight-bold text-white">Dữ liệu</span></li>
+                    <li class="sidebar-layout"><a href="{{ url_for('admin_orders') }}" class="svg-icon"><i class="fas fa-receipt"></i><span class="ml-2">Hoá đơn / đơn hàng</span></a></li>
+                    <li class="sidebar-layout"><a href="{{ url_for('admin_posts') }}" class="svg-icon"><i class="fas fa-edit"></i><span class="ml-2">Quản lý bài viết</span></a></li>
                     {% endif %}
 
                     <li class="px-3 pt-3 pb-2"><span class="text-uppercase small font-weight-bold text-white">Tài khoản</span></li>

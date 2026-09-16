@@ -58,6 +58,7 @@
                 </div>
                 {% endif %}
             </div>
+            <a href="{{ url_for('invoice', order_id=o._id) }}" class="btn btn-sm btn-outline-secondary mt-3">🧾 Xem hoá đơn</a>
         </div>
     </div>
     {% endfor %}

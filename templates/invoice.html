@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Hoá đơn #{{ o._id }}{% endblock %}
+{% block content %}
+
+<div class="card p-4" style="max-width:600px;margin:0 auto;">
+    <div class="text-center mb-4">
+        <h4 class="mb-0">🧾 HOÁ ĐƠN BÁN HÀNG</h4>
+        <p class="text-muted mb-0">{{ cfg.site_name or "CloudShop" }}</p>
+    </div>
+    <div class="row">
+        <div class="col-6 info-field mb-2">
+            <label>Mã đơn</label>
+            <div class="info-value">{{ o._id }}</div>
+        </div>
+        <div class="col-6 info-field mb-2">
+            <label>Thời gian</label>
+            <div class="info-value">{{ o.created_at.strftime("%d/%m/%Y %H:%M") }}</div>
+        </div>
+        <div class="col-6 info-field mb-2">
+            <label>Khách hàng</label>
+            <div class="info-value">{{ buyer.username if buyer else o.user_id }}</div>
+        </div>
+        <div class="col-6 info-field mb-2">
+            <label>Trạng thái</label>
+            <div class="info-value">
+                {% if o.status == 'pending' %}Chờ xử lý
+                {% elif o.status == 'cancelled' %}Đã huỷ
+                {% else %}Hoàn thành{% endif %}
+            </div>
+        </div>
+        <div class="col-12 info-field mb-2">
+            <label>Sản phẩm</label>
+            <div class="info-value">{{ o.product_name }} ({{ brands.get(o.brand, o.brand) }})</div>
+        </div>
+        <div class="col-12 info-field mb-0">
+            <label>Thành tiền</label>
+            <div class="info-value" style="font-size:1.3rem;font-weight:700;color:#2D11FE;">{{ "{:,}".format(o.price) }} đ</div>
+        </div>
+    </div>
+    <div class="text-center mt-4 no-print">
+        <button class="btn btn-primary" onclick="window.print()">🖨️ In hoá đơn</button>
+        <a href="{{ url_for('orders') }}" class="btn btn-secondary">Quay lại</a>
+    </div>
+</div>
+
+{% endblock %}

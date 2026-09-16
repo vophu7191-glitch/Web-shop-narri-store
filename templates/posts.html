@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Tin tức{% endblock %}
+{% block content %}
+
+<h4 class="mb-3">📰 Tin tức</h4>
+
+{% for post in items %}
+<div class="card p-3 mb-3">
+    <h6 class="mb-1">{{ post.title }}</h6>
+    <p class="text-muted small mb-2">{{ post.created_at.strftime("%d/%m/%Y %H:%M") }}</p>
+    <p class="mb-0" style="white-space:pre-wrap;">{{ post.content }}</p>
+</div>
+{% else %}
+<p class="text-muted">Chưa có tin tức nào.</p>
+{% endfor %}
+
+{% endblock %}
