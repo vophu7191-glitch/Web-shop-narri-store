@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Backup / Restore{% endblock %}
+{% block content %}
+
+<h4 class="mb-3">💾 Backup / Restore MongoDB</h4>
+
+<div class="card p-4 mb-4">
+    <h6>📥 Xuất backup</h6>
+    <p class="text-muted small">File JSON chứa TOÀN BỘ 12 collection ({{ stats|length }}): users, products, stock, orders, config, recharges, activity, posts, brands, coupons, reviews, notifications. Format có `__dt` / `__oid` wrapper để giữ được datetime + ObjectId khi restore lại.</p>
+    <ul class="small">
+        {% for k, v in stats.items() %}<li>{{ k }}: <b>{{ v }}</b> bản ghi</li>{% endfor %}
+    </ul>
+    {% if is_super %}
+    <a href="{{ url_for('admin_backup_export') }}" class="btn btn-primary">⬇️ Xuất JSON toàn bộ database</a>
+    {% else %}
+    <div class="alert alert-warning mb-0">Chỉ Super Admin được export toàn bộ.</div>
+    {% endif %}
+</div>
+
+<div class="card p-4">
+    <h6>📤 Restore từ backup</h6>
+    {% if not is_super %}
+        <div class="alert alert-warning mb-0">Chỉ Super Admin được restore.</div>
+    {% else %}
+    <div class="alert alert-danger">
+        <b>Cảnh báo:</b> restore là thao tác NGUY HIỂM. Nên <b>export backup mới trước</b> khi restore.
+    </div>
+    <form method="post" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-group">
+            <label>File backup JSON</label>
+            <input type="file" name="backup_file" accept=".json,application/json" class="form-control-file" required>
+        </div>
+        <div class="form-group">
+            <label>Chế độ</label>
+            <select name="mode" class="form-control">
+                <option value="merge">Merge (upsert theo _id — an toàn hơn, không xoá dữ liệu hiện tại)</option>
+                <option value="replace">Replace (XOÁ SẠCH collection rồi ghi mới — nguy hiểm!)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Gõ <code>RESTORE</code> vào ô dưới để xác nhận</label>
+            <input type="text" name="confirm_text" class="form-control" placeholder="RESTORE" required>
+        </div>
+        <button class="btn btn-danger" onclick="return confirm('Chắc chắn restore?');">Restore</button>
+    </form>
+    {% endif %}
+</div>
+
+{% endblock %}

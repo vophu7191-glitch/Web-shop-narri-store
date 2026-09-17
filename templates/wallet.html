@@ -18,9 +18,14 @@
 
     <hr>
 
-    <div class="text-center">
+    <div class="text-center wallet-qr-box"
+         {% if cfg.wallet_bg_url %}
+         style="background:linear-gradient(rgba(255,255,255,.85), rgba(255,255,255,.85)), url('{{ cfg.wallet_bg_url }}') center/cover no-repeat; padding:24px; border-radius:12px;"
+         {% else %}
+         style="background:url('{{ url_for('static', filename='images/bg-buy.png') }}') center/cover no-repeat; padding:24px; border-radius:12px;"
+         {% endif %}>
         {% if qr_url %}
-            <img src="{{ qr_url }}" alt="QR nạp tiền" style="max-width:260px;width:100%;border:1px solid #eee;border-radius:8px;">
+            <img src="{{ qr_url }}" alt="QR nạp tiền" style="max-width:260px;width:100%;border:1px solid #eee;border-radius:8px;background:#fff;">
             <p class="mt-2 mb-0"><b>Nội dung chuyển khoản (bắt buộc đúng):</b></p>
             <div class="code-box mt-1 d-inline-block">{{ transfer_content }}</div>
             <p class="text-muted small mt-2">Chuyển khoản bất kỳ số tiền nào với đúng nội dung trên, ví sẽ tự động cộng tiền sau vài giây.</p>
@@ -33,6 +38,7 @@
 <div class="card p-4 mb-4">
     <h5 class="mb-3">🔒 Đổi mật khẩu</h5>
     <form method="post" action="{{ url_for('change_password') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="row">
             <div class="col-md-4 mb-3">
                 <label class="small text-muted">Mật khẩu cũ</label>

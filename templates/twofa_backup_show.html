@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Backup codes{% endblock %}
+{% block content %}
+
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card p-4 mt-4">
+            <h4 class="mb-3">✅ 2FA đã bật!</h4>
+            <div class="alert alert-warning">
+                Đây là <b>8 backup code</b>. Lưu vào chỗ an toàn (giấy, password manager). Mỗi code chỉ dùng được <b>1 lần</b>
+                khi bạn mất phone. <b>Rời trang này là không xem lại được nữa</b> (chỉ nhìn được số lượng còn lại).
+            </div>
+
+            <div class="p-3 rounded" style="background:#f4f6fa;font-family:monospace;font-size:1.2rem;letter-spacing:.15em;">
+                {% for c in backup_codes %}
+                <div>{{ loop.index }}. <b>{{ c }}</b></div>
+                {% endfor %}
+            </div>
+
+            <button class="btn btn-outline-primary mt-3" onclick="var t=document.querySelector('.p-3').innerText;navigator.clipboard.writeText(t);this.textContent='✅ Đã copy!';">📋 Copy tất cả</button>
+            <a href="{{ url_for('admin_settings') }}" class="btn btn-primary mt-3">Về Cấu hình</a>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

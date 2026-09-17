@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Bật xác thực 2 lớp{% endblock %}
+{% block content %}
+
+<h4 class="mb-3">🔐 Bật xác thực 2 lớp (2FA)</h4>
+
+<div class="card p-4">
+    <p>Cài <b>Google Authenticator</b>, <b>Microsoft Authenticator</b>, <b>Authy</b> hoặc bất kỳ ứng dụng TOTP nào trên điện thoại.</p>
+
+    <ol>
+        <li>Mở app → thêm tài khoản mới → <b>Quét mã QR</b> bên dưới.</li>
+        <li>Nhập mã 6 số hiện ra để xác nhận.</li>
+        <li>Sau khi bật, mỗi lần vào trang admin bạn sẽ cần nhập mã 6 số.</li>
+    </ol>
+
+    <div class="row align-items-center">
+        <div class="col-md-4 text-center">
+            {% if qr_data_uri %}
+                <img src="{{ qr_data_uri }}" alt="QR 2FA" style="max-width:220px;border:1px solid #eee;border-radius:8px;">
+            {% else %}
+                <div class="alert alert-warning">Server chưa cài <code>qrcode</code>. Dán URI vào app thủ công.</div>
+            {% endif %}
+        </div>
+        <div class="col-md-8">
+            <div class="info-field mb-2">
+                <label>Secret key (dán tay vào app nếu không quét được QR)</label>
+                <div class="code-box">{{ secret }}</div>
+            </div>
+            <div class="info-field mb-3">
+                <label>otpauth URI</label>
+                <div class="code-box" style="font-size:.75rem;word-break:break-all;">{{ uri }}</div>
+            </div>
+
+            <form method="post" class="form-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <label class="mr-2">Nhập mã 6 số từ app:</label>
+                <input type="text" name="code" class="form-control mr-2" style="width:130px;letter-spacing:.3em;text-align:center;font-family:monospace;" placeholder="000000" maxlength="6" autofocus required>
+                <button class="btn btn-primary">✅ Xác nhận &amp; Bật 2FA</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

@@ -4,6 +4,12 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <title>{{ cfg.site_name or "CloudShop" }} — {% block title %}Trang chủ{% endblock %}</title>
+    {% if cfg.seo_description %}<meta name="description" content="{{ cfg.seo_description }}">{% endif %}
+    {% if cfg.seo_keywords %}<meta name="keywords" content="{{ cfg.seo_keywords }}">{% endif %}
+    <meta property="og:title" content="{{ cfg.site_name or 'CloudShop' }}">
+    {% if cfg.seo_description %}<meta property="og:description" content="{{ cfg.seo_description }}">{% endif %}
+    {% if cfg.logo_url %}<meta property="og:image" content="{{ cfg.logo_url }}">{% endif %}
+    <link rel="icon" type="image/png" href="{{ cfg.favicon_url or url_for('static', filename='images/favicon_IKS.png') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/backend-plugin.min.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/responsive.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/backend.css') }}">
@@ -56,6 +62,17 @@
             .iq-sidebar, .iq-top-navbar, .iq-footer, .mobile-bottom-bar, .no-print { display:none !important; }
             .content-page { padding:0 !important; margin-left:0 !important; }
         }
+        /* Dark mode toggle */
+        body.dark-mode { background:#111827; color:#e5e7eb; }
+        body.dark-mode .card, body.dark-mode .content-page .card { background:#1f2937; color:#e5e7eb; border-color:#374151; }
+        body.dark-mode .table { color:#e5e7eb; }
+        body.dark-mode .table-bordered td, body.dark-mode .table-bordered th { border-color:#374151; }
+        body.dark-mode .info-value, body.dark-mode .code-box { background:#111827; color:#e5e7eb; border-color:#374151; }
+        body.dark-mode .form-control { background:#111827; color:#e5e7eb; border-color:#374151; }
+        body.dark-mode .form-control::placeholder { color:#6b7280; }
+        body.dark-mode .text-muted { color:#9ca3af !important; }
+        body.dark-mode .price-box { background:#0f172a; }
+        body.dark-mode .iq-footer, body.dark-mode .mobile-bottom-bar { background:#1f2937; border-color:#374151; }
     </style>
     {% block extra_head %}{% endblock %}
 </head>
@@ -65,8 +82,12 @@
     <!-- ============ SIDEBAR ============ -->
     <div class="iq-sidebar sidebar-default">
         <div class="iq-sidebar-logo d-flex align-items-end justify-content-between">
-            <a href="{{ url_for('home') }}" class="header-logo">
-                <span class="text-white font-weight-bold" style="font-size:1.15rem;">☁️ {{ cfg.site_name or "CloudShop" }}</span>
+            <a href="{{ url_for('home') }}" class="header-logo d-flex align-items-center">
+                {% if cfg.logo_url %}
+                    <img src="{{ cfg.logo_url }}" alt="{{ cfg.site_name }}" style="max-height:34px;max-width:150px;object-fit:contain;">
+                {% else %}
+                    <span class="text-white font-weight-bold" style="font-size:1.15rem;">☁️ {{ cfg.site_name or "CloudShop" }}</span>
+                {% endif %}
             </a>
             <div class="side-menu-bt-sidebar-1" onclick="document.body.classList.toggle('sidebar-main')">
                 <svg xmlns="http://www.w3.org/2000/svg" class="text-light wrapper-menu" width="26" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -129,9 +150,16 @@
                     </li>
 
                     {% if current_user and current_user.role == 'admin' %}
-                    <li class="px-3 pt-3 pb-2"><span class="text-uppercase small font-weight-bold text-white">Hệ thống</span></li>
+                    <li class="px-3 pt-3 pb-2"><span class="text-uppercase small font-weight-bold text-white">Quản trị</span></li>
+                    <li class="sidebar-layout"><a href="{{ url_for('admin_dashboard') }}" class="svg-icon"><i class="fas fa-chart-line"></i><span class="ml-2">📊 Dashboard</span></a></li>
                     <li class="sidebar-layout"><a href="{{ url_for('admin_settings') }}" class="svg-icon"><i class="fas fa-cogs"></i><span class="ml-2">Cấu hình &amp; API Keys</span></a></li>
-                    <li class="sidebar-layout"><a href="{{ url_for('admin_products') }}" class="svg-icon"><i class="fas fa-box"></i><span class="ml-2">Sản phẩm &amp; kho hàng</span></a></li>
+                    <li class="sidebar-layout"><a href="{{ url_for('admin_slides') }}" class="svg-icon"><i class="fas fa-images"></i><span class="ml-2">Slide banner trang chủ</span></a></li>
+                    <li class="sidebar-layout"><a href="{{ url_for('admin_coupons') }}" class="svg-icon"><i class="fas fa-ticket-alt"></i><span class="ml-2">🎟️ Coupon / Voucher</span></a></li>
+                    <li class="sidebar-layout"><a href="{{ url_for('admin_backup') }}" class="svg-icon"><i class="fas fa-database"></i><span class="ml-2">💾 Backup / Restore</span></a></li>
+
+                    <li class="px-3 pt-3 pb-2"><span class="text-uppercase small font-weight-bold text-white">Kho hàng</span></li>
+                    <li class="sidebar-layout"><a href="{{ url_for('admin_brands') }}" class="svg-icon"><i class="fas fa-tags"></i><span class="ml-2">Nhóm / Thương hiệu</span></a></li>
+                    <li class="sidebar-layout"><a href="{{ url_for('admin_products') }}" class="svg-icon"><i class="fas fa-box"></i><span class="ml-2">Sản phẩm &amp; kho code</span></a></li>
 
                     <li class="px-3 pt-3 pb-2"><span class="text-uppercase small font-weight-bold text-white">Người dùng</span></li>
                     <li class="sidebar-layout"><a href="{{ url_for('admin_users') }}" class="svg-icon"><i class="fas fa-users-cog"></i><span class="ml-2">Quản lý thành viên</span></a></li>
@@ -166,9 +194,16 @@
                     <svg xmlns="http://www.w3.org/2000/svg" class="text-secondary wrapper-menu" width="30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
                     </svg>
+                    <a href="#" class="badge border border-secondary text-secondary ml-1" onclick="toggleDark(event);" title="Đổi giao diện sáng/tối" style="cursor:pointer;">🌓</a>
                     {% if current_user %}
-                        <span class="badge border border-primary text-primary"><i class="fas fa-wallet mr-1"></i>Ví: <b>{{ "{:,}".format(current_user.balance) }}đ</b></span>
-                        <a href="{{ url_for('logout') }}" class="badge border border-secondary text-secondary"><i class="fas fa-sign-out-alt mr-1"></i><b>{{ current_user.username }}</b></a>
+                        <span class="badge border border-primary text-primary ml-1"><i class="fas fa-wallet mr-1"></i>Ví: <b>{{ "{:,}".format(current_user.balance) }}đ</b></span>
+                        {% if current_user.role == 'admin' %}
+                        <a href="#" id="notifBell" class="badge border border-warning text-warning ml-1" onclick="toggleNotif(event)" style="position:relative;">
+                            <i class="fas fa-bell"></i>
+                            <span id="notifCount" class="badge badge-danger" style="display:none;position:absolute;top:-6px;right:-6px;border-radius:10px;font-size:.65rem;">0</span>
+                        </a>
+                        {% endif %}
+                        <a href="{{ url_for('logout') }}" class="badge border border-secondary text-secondary ml-1"><i class="fas fa-sign-out-alt mr-1"></i><b>{{ current_user.username }}</b></a>
                     {% else %}
                         <span class="badge border border-primary text-primary"><i class="fas fa-wallet mr-1"></i>Ví: <b>0đ</b></span>
                         <a href="{{ url_for('login') }}" class="badge border border-danger text-danger"><i class="fas fa-sign-in-alt mr-1"></i><b>Đăng nhập</b></a>
@@ -202,6 +237,125 @@
         </div>
     </footer>
 </div>
+
+{% if current_user and current_user.role == 'admin' %}
+<div id="notifPanel" style="display:none;position:fixed;top:60px;right:16px;width:340px;max-height:70vh;overflow:auto;background:#fff;box-shadow:0 10px 30px rgba(0,0,0,.18);border-radius:12px;z-index:2000;padding:10px 0;">
+    <div class="d-flex justify-content-between align-items-center px-3 pb-2 border-bottom">
+        <b>🔔 Thông báo</b>
+        <a href="#" onclick="markAllRead(event)" class="small">Đánh dấu đã đọc</a>
+    </div>
+    <div id="notifList" class="px-2">
+        <p class="text-muted small text-center py-3 mb-0">Chưa có thông báo.</p>
+    </div>
+</div>
+<audio id="notifSound" preload="auto">
+    <source src="data:audio/mp3;base64,SUQzAwAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjIwLjEwMAAAAAAAAAAAAAAA//tQxAADB8AAAAAAAAAAAAAAAAAAAABJbmZvAAAADwAAAAgAAAy2ACwsLDIyMjJERERSUlJhYWFhcnJyfHx8h4eHkpKSnZ2dpqamsLCwt7e3wcHByMjIz8/P1tbW3d3d4uLi5+fn7Ozs8fHx9vb2+/v7//8AAAA5TEFNRTMuMTAwAZYAAAAAAAAAABQ4JAJAQgAAOAAADLYyOFBSAAAAAAAAAAAAAAAAAAAA//tQxAAAAAAAAAAAAAAAAAAAAAAAA==" type="audio/mp3">
+</audio>
+
+<script>
+(function () {
+    var evtSrc, notifCache = [], panel = document.getElementById('notifPanel');
+    function fmtTime(iso) { try { return new Date(iso).toLocaleString('vi-VN'); } catch (e) { return iso; } }
+    function badgeClass(k) {
+        if (k === 'order_pending') return 'badge-warning';
+        if (k === 'recharge') return 'badge-success';
+        return 'badge-info';
+    }
+    function render(items) {
+        var list = document.getElementById('notifList');
+        if (!items.length) { list.innerHTML = '<p class="text-muted small text-center py-3 mb-0">Chưa có thông báo.</p>'; return; }
+        list.innerHTML = items.slice(0, 20).map(function (n) {
+            return '<a href="' + (n.url || '#') + '" class="d-block px-2 py-2 border-bottom text-dark" style="text-decoration:none;' + (n.is_read ? '' : 'background:#fff7e6;') + '">' +
+                '<div class="d-flex justify-content-between align-items-start"><span class="badge ' + badgeClass(n.kind) + ' mr-1">' + (n.kind || '') + '</span>' +
+                '<span class="small text-muted">' + fmtTime(n.created_at) + '</span></div>' +
+                '<div><b>' + escapeHtml(n.title || '') + '</b></div>' +
+                '<div class="small">' + escapeHtml(n.message || '') + '</div>' +
+                '</a>';
+        }).join('');
+    }
+    function escapeHtml(s) { return String(s || '').replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+    function updateBadge(n) {
+        var b = document.getElementById('notifCount');
+        if (!b) return;
+        if (n > 0) { b.textContent = n > 99 ? '99+' : n; b.style.display = ''; }
+        else b.style.display = 'none';
+    }
+    function fetchNotifs() {
+        fetch('{{ url_for("admin_notifications") }}', {credentials: 'same-origin'})
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                notifCache = data.items || [];
+                render(notifCache);
+                updateBadge(data.unread || 0);
+            }).catch(function () {});
+    }
+    window.toggleNotif = function (e) {
+        if (e) e.preventDefault();
+        panel.style.display = (panel.style.display === 'none') ? '' : 'none';
+        if (panel.style.display !== 'none') fetchNotifs();
+    };
+    window.markAllRead = function (e) {
+        if (e) e.preventDefault();
+        fetch('{{ url_for("admin_notifications_mark_read") }}', {
+            method: 'POST', credentials: 'same-origin',
+            headers: {'X-CSRF-Token': '{{ csrf_token() }}'}
+        }).then(function () { fetchNotifs(); });
+    };
+    document.addEventListener('click', function (e) {
+        if (panel.style.display === 'none') return;
+        if (!panel.contains(e.target) && !document.getElementById('notifBell').contains(e.target)) {
+            panel.style.display = 'none';
+        }
+    });
+
+    // Server-Sent Events — nhận push realtime từ server
+    try {
+        evtSrc = new EventSource('{{ url_for("admin_stream") }}');
+        evtSrc.addEventListener('notify', function (e) {
+            try {
+                var n = JSON.parse(e.data);
+                // Prepend + phát tiếng ting
+                notifCache.unshift(Object.assign({is_read: false}, n));
+                render(notifCache);
+                var b = document.getElementById('notifCount');
+                var cur = parseInt((b.textContent || '0').replace(/\D/g,'') || '0', 10);
+                updateBadge(cur + 1);
+                try { document.getElementById('notifSound').play(); } catch (e2) {}
+                // Trình duyệt Notification (nếu user cho phép)
+                if (window.Notification && Notification.permission === 'granted') {
+                    new Notification(n.title || 'Thông báo mới', {body: n.message || ''});
+                }
+            } catch (err) {}
+        });
+        evtSrc.addEventListener('error', function () { /* auto-reconnect */ });
+    } catch (e) { console.warn('SSE not available:', e); }
+
+    // Xin quyền notify OS
+    if (window.Notification && Notification.permission === 'default') {
+        setTimeout(function () { try { Notification.requestPermission(); } catch (e) {} }, 3000);
+    }
+
+    // Fetch lần đầu để hiện badge unread count
+    fetchNotifs();
+})();
+</script>
+{% endif %}
+
+<script>
+// Dark mode: nhớ preference qua localStorage
+(function () {
+    try {
+        if (localStorage.getItem('cloudshop_dark') === '1') document.body.classList.add('dark-mode');
+    } catch (e) {}
+    window.toggleDark = function (e) {
+        if (e) e.preventDefault();
+        document.body.classList.toggle('dark-mode');
+        try {
+            localStorage.setItem('cloudshop_dark', document.body.classList.contains('dark-mode') ? '1' : '0');
+        } catch (err) {}
+    };
+})();
+</script>
 
 <div class="mobile-bottom-bar">
     <a href="{{ url_for('wallet') if current_user else url_for('login') }}">

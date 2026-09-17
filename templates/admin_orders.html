@@ -2,11 +2,41 @@
 {% block title %}Tất cả đơn hàng{% endblock %}
 {% block content %}
 
-<h4 class="mb-3">📦 Tất cả đơn hàng ({{ orders|length }})</h4>
+<h4 class="mb-3">📦 Đơn hàng ({{ total }})
+    <a href="{{ url_for('admin_export_orders') }}" class="btn btn-sm btn-outline-primary float-right">⬇️ Xuất CSV</a>
+</h4>
+
+<div class="card p-3 mb-3">
+    <form method="get" class="form-row">
+        <div class="col-md-3 form-group mb-2">
+            <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="🔎 Username / SP / mã đơn">
+        </div>
+        <div class="col-md-2 form-group mb-2">
+            <select name="status" class="form-control">
+                <option value="">— Tất cả trạng thái —</option>
+                <option value="pending"    {% if status=='pending'   %}selected{% endif %}>Chờ xử lý</option>
+                <option value="completed"  {% if status=='completed' %}selected{% endif %}>Hoàn thành</option>
+                <option value="cancelled"  {% if status=='cancelled' %}selected{% endif %}>Đã huỷ</option>
+            </select>
+        </div>
+        <div class="col-md-2 form-group mb-2">
+            <input type="date" name="from" value="{{ from_str }}" class="form-control">
+        </div>
+        <div class="col-md-2 form-group mb-2">
+            <input type="date" name="to" value="{{ to_str }}" class="form-control">
+        </div>
+        <div class="col-md-1 form-group mb-2">
+            <input type="number" name="per" value="{{ per }}" min="5" max="200" class="form-control" title="Số dòng / trang">
+        </div>
+        <div class="col-md-2 form-group mb-2">
+            <button class="btn btn-primary btn-block">Lọc</button>
+        </div>
+    </form>
+</div>
 
 <div class="table-responsive">
 <table class="table table-bordered bg-white">
-    <thead><tr><th>Thời gian</th><th>Khách hàng</th><th>Sản phẩm</th><th>Giá</th><th>Trạng thái</th><th>Code / Tài khoản đã giao</th><th>Thao tác</th></tr></thead>
+    <thead><tr><th>Thời gian</th><th>Khách hàng</th><th>Sản phẩm</th><th>Giá</th><th>Trạng thái</th><th>Code / TK đã giao</th><th style="min-width:230px">Thao tác</th></tr></thead>
     <tbody>
     {% for o in orders %}
         <tr>
@@ -15,13 +45,9 @@
             <td>{{ o.product_name }}</td>
             <td>{{ "{:,}".format(o.price) }}đ</td>
             <td>
-                {% if o.status == 'pending' %}
-                    <span class="badge badge-warning">Chờ xử lý</span>
-                {% elif o.status == 'cancelled' %}
-                    <span class="badge badge-danger">Đã huỷ</span>
-                {% else %}
-                    <span class="badge badge-success">Hoàn thành</span>
-                {% endif %}
+                {% if o.status == 'pending' %}<span class="badge badge-warning">Chờ xử lý</span>
+                {% elif o.status == 'cancelled' %}<span class="badge badge-danger">Đã huỷ</span>
+                {% else %}<span class="badge badge-success">Hoàn thành</span>{% endif %}
             </td>
             <td class="code-box">
                 {% if o.get('fulfillment') == 'manual' %}
@@ -31,15 +57,29 @@
                 {% endif %}
             </td>
             <td>
-                {% if o.get('fulfillment') == 'manual' %}
                 <a href="{{ url_for('admin_order_update', order_id=o._id) }}" class="btn btn-sm btn-outline-primary">Xử lý</a>
-                {% endif %}
                 <a href="{{ url_for('invoice', order_id=o._id) }}" class="btn btn-sm btn-outline-secondary">🧾</a>
+                {% if o.get('fulfillment', 'auto') == 'auto' %}
+                <form method="post" action="{{ url_for('admin_reissue_code', order_id=o._id) }}" class="d-inline"
+                      onsubmit="return confirm('Cấp code khác cho đơn này? Code cũ sẽ được đánh dấu voided.');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-sm btn-outline-warning">🔁 Cấp lại</button>
+                </form>
+                {% endif %}
+                <form method="post" action="{{ url_for('admin_delete_order', order_id=o._id) }}" class="d-inline"
+                      onsubmit="return confirm('Xoá HẲN đơn này (không hoàn tiền)?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-sm btn-outline-danger">🗑️</button>
+                </form>
             </td>
         </tr>
+    {% else %}
+        <tr><td colspan="7" class="text-center text-muted py-4">Không có đơn nào khớp bộ lọc.</td></tr>
     {% endfor %}
     </tbody>
 </table>
 </div>
+
+{% include "_pagination.html" %}
 
 {% endblock %}

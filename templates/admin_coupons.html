@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Coupon / Voucher{% endblock %}
+{% block content %}
+
+<h4 class="mb-3">🎟️ Coupon / Voucher ({{ items|length }})</h4>
+
+<div class="card p-4 mb-4">
+    <h6>➕ Tạo coupon mới</h6>
+    <form method="post" class="form-row">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="col-md-2 form-group">
+            <label>Mã (VD: SALE10)</label>
+            <input type="text" name="code" class="form-control" required style="text-transform:uppercase">
+        </div>
+        <div class="col-md-2 form-group">
+            <label>Kiểu</label>
+            <select name="kind" class="form-control">
+                <option value="percent">Giảm % (0-100)</option>
+                <option value="fixed">Giảm số tiền cố định (VNĐ)</option>
+            </select>
+        </div>
+        <div class="col-md-2 form-group">
+            <label>Giá trị</label>
+            <input type="number" step="0.01" name="value" class="form-control" required>
+        </div>
+        <div class="col-md-1 form-group">
+            <label>Tổng lượt (0=∞)</label>
+            <input type="number" name="max_uses" value="0" class="form-control">
+        </div>
+        <div class="col-md-1 form-group">
+            <label>Lượt/user</label>
+            <input type="number" name="per_user_limit" value="1" class="form-control">
+        </div>
+        <div class="col-md-2 form-group">
+            <label>Đơn tối thiểu (VNĐ)</label>
+            <input type="number" name="min_amount" value="0" class="form-control">
+        </div>
+        <div class="col-md-2 form-group">
+            <label>Hết hạn</label>
+            <input type="date" name="expires_at" class="form-control">
+        </div>
+        <div class="col-12"><button class="btn btn-primary">Tạo coupon</button></div>
+    </form>
+</div>
+
+<div class="table-responsive">
+<table class="table table-bordered bg-white">
+    <thead><tr>
+        <th>Mã</th><th>Kiểu</th><th>Giá trị</th><th>Đã dùng / Tối đa</th>
+        <th>Đơn tối thiểu</th><th>/user</th><th>Hết hạn</th><th>Trạng thái</th><th>Thao tác</th>
+    </tr></thead>
+    <tbody>
+    {% for c in items %}
+        <tr>
+            <td><code>{{ c.code }}</code></td>
+            <td>{{ 'Giảm %' if c.kind=='percent' else 'Giảm VNĐ' }}</td>
+            <td>{% if c.kind=='percent' %}{{ c.value }}%{% else %}{{ "{:,}".format(c.value|int) }}đ{% endif %}</td>
+            <td>{{ c.uses }} / {{ c.max_uses if c.max_uses else '∞' }}</td>
+            <td>{{ "{:,}".format(c.get('min_amount',0)) }}đ</td>
+            <td>{{ c.get('per_user_limit', 0) or '∞' }}</td>
+            <td>{{ c.expires_at.strftime("%d/%m/%Y") if c.expires_at else '—' }}</td>
+            <td>{% if c.enabled %}<span class="badge badge-success">Bật</span>{% else %}<span class="badge badge-secondary">Tắt</span>{% endif %}</td>
+            <td>
+                <form method="post" action="{{ url_for('admin_toggle_coupon', cid=c._id) }}" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-sm btn-outline-secondary">{{ 'Tắt' if c.enabled else 'Bật' }}</button>
+                </form>
+                <form method="post" action="{{ url_for('admin_delete_coupon', cid=c._id) }}" class="d-inline" onsubmit="return confirm('Xoá coupon?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-sm btn-outline-danger">🗑️</button>
+                </form>
+            </td>
+        </tr>
+    {% else %}
+        <tr><td colspan="9" class="text-center text-muted py-4">Chưa có coupon nào.</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+
+{% endblock %}

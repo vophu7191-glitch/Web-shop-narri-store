@@ -6,7 +6,8 @@
 
 <div class="card p-4 mb-4">
     <h6>➕ Thêm sản phẩm mới</h6>
-    <form method="post" class="row">
+    <form method="post" class="row" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="col-md-2">
             <label>Thương hiệu</label>
             <select name="brand" class="form-control" required>
@@ -38,8 +39,14 @@
             <button class="btn btn-primary btn-block">Thêm</button>
         </div>
         <div class="col-md-4 mt-2">
-            <label>Ảnh sản phẩm (URL, tuỳ chọn)</label>
+            <label>Ảnh sản phẩm — upload trực tiếp</label>
+            <input type="file" name="image_file" accept="image/*" class="form-control-file">
+            <small class="text-muted d-block">Tối đa 2MB. JPG/PNG/WEBP/GIF.</small>
+        </div>
+        <div class="col-md-4 mt-2">
+            <label>… hoặc dán URL ảnh</label>
             <input type="text" name="image_url" class="form-control" placeholder="https://...">
+            <small class="text-muted d-block">Nếu upload file, URL này bị bỏ qua.</small>
         </div>
         <div class="col-md-2 mt-2 d-flex align-items-center">
             <div class="custom-control custom-checkbox">
@@ -50,13 +57,30 @@
     </form>
 </div>
 
+<div class="card p-3 mb-3">
+    <form method="get" class="form-inline">
+        <input type="text" name="q" value="{{ q }}" class="form-control mr-2 mb-2" placeholder="🔎 Tìm tên sản phẩm">
+        <select name="brand" class="form-control mr-2 mb-2">
+            <option value="">— Tất cả brand —</option>
+            {% for k, label in brands.items() %}
+                <option value="{{ k }}" {% if k == brand_f %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+        <button class="btn btn-outline-primary mb-2">Lọc</button>
+        {% if q or brand_f %}
+        <a href="{{ url_for('admin_products') }}" class="btn btn-outline-secondary ml-2 mb-2">Xoá lọc</a>
+        {% endif %}
+    </form>
+</div>
+
+<div class="table-responsive">
 <table class="table table-bordered bg-white">
     <thead>
-        <tr><th>Thương hiệu</th><th>Tên gói</th><th>Giá</th><th>Kiểu bán</th><th>Tồn kho</th><th>Trạng thái</th><th>Thao tác</th></tr>
+        <tr><th>Thương hiệu</th><th>Tên gói</th><th>Giá</th><th>Kiểu bán</th><th>Tồn kho</th><th>Trạng thái</th><th style="min-width:280px">Thao tác</th></tr>
     </thead>
     <tbody>
     {% for p in items %}
-        <tr>
+        <tr class="{% if p.is_low %}table-warning{% endif %}">
             <td>{{ brands.get(p.brand, p.brand) }}</td>
             <td>{% if p.pinned %}📌 {% endif %}{{ p.name }}</td>
             <td>{{ "{:,}".format(p.price) }}đ</td>
@@ -67,25 +91,39 @@
                     <span class="badge badge-light">Tự động</span>
                 {% endif %}
             </td>
-            <td>{% if p.stock_count is none %}<span class="text-muted">—</span>{% else %}{{ p.stock_count }}{% endif %}</td>
+            <td>
+                {% if p.stock_count is none %}<span class="text-muted">—</span>
+                {% else %}{{ p.stock_count }}
+                    {% if p.is_low %}<span class="badge badge-danger ml-1">Thấp</span>{% endif %}
+                {% endif %}
+            </td>
             <td>{% if p.enabled %}<span class="badge badge-success">Đang bán</span>{% else %}<span class="badge badge-secondary">Đã ẩn</span>{% endif %}</td>
             <td>
+                <a href="{{ url_for('admin_edit_product', pid=p._id) }}" class="btn btn-sm btn-outline-primary">✏️ Sửa</a>
                 {% if p.get('fulfillment', 'auto') != 'manual' %}
-                <a href="{{ url_for('admin_stock', pid=p._id) }}" class="btn btn-sm btn-outline-dark">📦 Nhập code</a>
+                <a href="{{ url_for('admin_stock', pid=p._id) }}" class="btn btn-sm btn-outline-dark">📦 Kho</a>
                 {% endif %}
                 <form method="post" action="{{ url_for('admin_pin_product', pid=p._id) }}" class="d-inline">
-                    <button class="btn btn-sm btn-outline-warning">{{ 'Bỏ ghim' if p.pinned else '📌 Ghim' }}</button>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-sm btn-outline-warning">{{ 'Bỏ ghim' if p.pinned else '📌' }}</button>
                 </form>
                 <form method="post" action="{{ url_for('admin_toggle_product', pid=p._id) }}" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button class="btn btn-sm btn-outline-secondary">{{ 'Ẩn' if p.enabled else 'Hiện' }}</button>
                 </form>
                 <form method="post" action="{{ url_for('admin_delete_product', pid=p._id) }}" class="d-inline" onsubmit="return confirm('Xoá hẳn sản phẩm này và toàn bộ code trong kho?');">
-                    <button class="btn btn-sm btn-outline-danger">Xoá</button>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-sm btn-outline-danger">🗑️</button>
                 </form>
             </td>
         </tr>
+    {% else %}
+        <tr><td colspan="7" class="text-center text-muted py-4">Không có sản phẩm nào khớp bộ lọc.</td></tr>
     {% endfor %}
     </tbody>
 </table>
+</div>
+
+<p class="text-muted small">Ngưỡng cảnh báo tồn kho thấp: ≤ {{ low_thr }} code (đổi trong Cấu hình).</p>
 
 {% endblock %}

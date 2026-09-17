@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Sửa sản phẩm{% endblock %}
+{% block content %}
+
+<h4 class="mb-3">✏️ Sửa sản phẩm — {{ p.name }}</h4>
+<a href="{{ url_for('admin_products') }}" class="btn btn-sm btn-outline-secondary mb-3">← Quay lại</a>
+
+<div class="card p-4">
+    <form method="post" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-row">
+            <div class="col-md-3 form-group">
+                <label>Thương hiệu</label>
+                <select name="brand" class="form-control" required>
+                    {% for key, b in brands_all.items() %}
+                    <option value="{{ key }}" {% if key == p.brand %}selected{% endif %}>{{ b.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-5 form-group">
+                <label>Tên gói</label>
+                <input type="text" name="name" class="form-control" value="{{ p.name }}" required>
+            </div>
+            <div class="col-md-2 form-group">
+                <label>Giá (VNĐ)</label>
+                <input type="number" name="price" class="form-control" value="{{ p.price }}" min="1" required>
+            </div>
+            <div class="col-md-2 form-group">
+                <label>Kiểu bán</label>
+                <select name="fulfillment" class="form-control">
+                    <option value="auto"   {% if p.get('fulfillment','auto') == 'auto' %}selected{% endif %}>Tự động</option>
+                    <option value="manual" {% if p.get('fulfillment','auto') == 'manual' %}selected{% endif %}>Thủ công</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="col-md-8 form-group">
+                <label>Mô tả</label>
+                <input type="text" name="description" class="form-control" value="{{ p.get('description','') }}">
+            </div>
+            <div class="col-md-4 form-group d-flex align-items-end">
+                <div class="custom-control custom-checkbox">
+                    <input type="checkbox" class="custom-control-input" id="pinnedEdit" name="pinned" value="1" {% if p.pinned %}checked{% endif %}>
+                    <label class="custom-control-label" for="pinnedEdit">📌 Ghim nổi bật lên trang chủ</label>
+                </div>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="col-md-6 form-group">
+                <label>Ảnh — upload file mới (tuỳ chọn)</label>
+                <input type="file" name="image_file" accept="image/*" class="form-control-file">
+                <small class="text-muted d-block">Bỏ trống nếu không đổi ảnh. Tối đa 2MB.</small>
+            </div>
+            <div class="col-md-6 form-group">
+                <label>… hoặc dán URL ảnh</label>
+                <input type="text" name="image_url" class="form-control" value="{{ p.get('image_url','') }}" placeholder="https://...">
+            </div>
+        </div>
+        {% if p.get('image_url') %}
+        <div class="form-group">
+            <label class="small text-muted">Ảnh hiện tại</label>
+            <div><img src="{{ p.image_url }}" alt="preview" style="max-height:120px;border:1px solid #eee;border-radius:6px;"></div>
+        </div>
+        {% endif %}
+        <button class="btn btn-primary">💾 Lưu thay đổi</button>
+        <a href="{{ url_for('admin_products') }}" class="btn btn-outline-secondary">Huỷ</a>
+    </form>
+</div>
+
+{% endblock %}

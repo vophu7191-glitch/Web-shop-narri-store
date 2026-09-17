@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+    .stat-card { border-radius: 14px; color: #fff; padding: 18px 20px; }
+    .stat-card .title { font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; opacity: .9; }
+    .stat-card .value { font-size: 1.55rem; font-weight: 700; margin-top: 4px; }
+    .stat-card .sub   { font-size: .78rem; opacity: .8; margin-top: 4px; }
+    .stat-blue   { background: linear-gradient(135deg, #2D11FE, #6A5CFF); }
+    .stat-green  { background: linear-gradient(135deg, #16a085, #58d0a8); }
+    .stat-orange { background: linear-gradient(135deg, #e67e22, #f39c12); }
+    .stat-red    { background: linear-gradient(135deg, #c0392b, #e74c3c); }
+    .stat-purple { background: linear-gradient(135deg, #6a1b9a, #ab47bc); }
+    .stat-teal   { background: linear-gradient(135deg, #0f766e, #14b8a6); }
+    .mini-card { background:#fff; border:1px solid #eef1f7; border-radius:12px; padding:16px; height:100%; }
+    .mini-card h6 { margin-bottom: 12px; font-weight:700; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h4 class="mb-3">📊 Bảng điều khiển</h4>
+
+<div class="row">
+    <div class="col-md-4 col-lg-2 mb-3"><div class="stat-card stat-blue">
+        <div class="title">Doanh thu 24h</div>
+        <div class="value">{{ "{:,}".format(rev_1d) }}đ</div>
+        <div class="sub">{{ cnt_ord_1d }} đơn hoàn thành</div>
+    </div></div>
+    <div class="col-md-4 col-lg-2 mb-3"><div class="stat-card stat-green">
+        <div class="title">Doanh thu 7 ngày</div>
+        <div class="value">{{ "{:,}".format(rev_7d) }}đ</div>
+        <div class="sub">{{ cnt_ord_7d }} đơn</div>
+    </div></div>
+    <div class="col-md-4 col-lg-2 mb-3"><div class="stat-card stat-purple">
+        <div class="title">Doanh thu 30 ngày</div>
+        <div class="value">{{ "{:,}".format(rev_30d) }}đ</div>
+        <div class="sub">{{ cnt_ord_30d }} đơn</div>
+    </div></div>
+    <div class="col-md-4 col-lg-2 mb-3"><div class="stat-card stat-teal">
+        <div class="title">Nạp tiền 7 ngày</div>
+        <div class="value">{{ "{:,}".format(rch_7d) }}đ</div>
+        <div class="sub">{{ cnt_rch_7d }} giao dịch</div>
+    </div></div>
+    <div class="col-md-4 col-lg-2 mb-3"><div class="stat-card stat-orange">
+        <div class="title">Đơn chờ xử lý</div>
+        <div class="value">{{ pending_orders }}</div>
+        <div class="sub">cần admin duyệt tay</div>
+    </div></div>
+    <div class="col-md-4 col-lg-2 mb-3"><div class="stat-card stat-red">
+        <div class="title">Tồn kho tổng</div>
+        <div class="value">{{ total_stock }}</div>
+        <div class="sub">code chưa bán</div>
+    </div></div>
+</div>
+
+<div class="row">
+    <div class="col-md-8 mb-3">
+        <div class="mini-card">
+            <h6>📈 Doanh thu & số đơn 7 ngày</h6>
+            <canvas id="chartRevenue" height="120"></canvas>
+        </div>
+    </div>
+    <div class="col-md-4 mb-3">
+        <div class="mini-card">
+            <h6>📦 Đơn theo trạng thái</h6>
+            <ul class="list-unstyled mb-0">
+                <li class="mb-2"><span class="badge badge-warning mr-2">Chờ</span> {{ status_counts.pending }}</li>
+                <li class="mb-2"><span class="badge badge-success mr-2">Hoàn thành</span> {{ status_counts.completed }}</li>
+                <li class="mb-2"><span class="badge badge-danger mr-2">Đã huỷ</span> {{ status_counts.cancelled }}</li>
+            </ul>
+            <hr>
+            <h6>👥 Người dùng</h6>
+            <div>Tổng: <b>{{ total_users }}</b> — Mới 7 ngày: <b>{{ new_users_7d }}</b></div>
+            <div>Có số dư: <b>{{ active_users }}</b></div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6 mb-3">
+        <div class="mini-card">
+            <h6>🔥 Top sản phẩm bán chạy (30 ngày)</h6>
+            {% if top_products %}
+            <table class="table table-sm mb-0">
+                <thead><tr><th>#</th><th>Tên</th><th class="text-right">Đơn</th><th class="text-right">Doanh thu</th></tr></thead>
+                <tbody>
+                {% for p in top_products %}
+                    <tr>
+                        <td>{{ loop.index }}</td>
+                        <td>{{ p.name }}</td>
+                        <td class="text-right">{{ p.n }}</td>
+                        <td class="text-right">{{ "{:,}".format(p.rev) }}đ</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% else %}<p class="text-muted mb-0">Chưa có đơn nào trong 30 ngày.</p>{% endif %}
+        </div>
+    </div>
+    <div class="col-md-6 mb-3">
+        <div class="mini-card">
+            <h6>🏷️ Doanh thu theo brand (30 ngày)</h6>
+            {% if brand_rev %}
+            <table class="table table-sm mb-0">
+                <thead><tr><th>Brand</th><th class="text-right">Đơn</th><th class="text-right">Doanh thu</th></tr></thead>
+                <tbody>
+                {% for b in brand_rev %}
+                    <tr><td>{{ b.label }}</td><td class="text-right">{{ b.n }}</td><td class="text-right">{{ "{:,}".format(b.rev) }}đ</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% else %}<p class="text-muted mb-0">Chưa có đơn nào trong 30 ngày.</p>{% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12 mb-3">
+        <div class="mini-card">
+            <h6>⚠️ Cảnh báo tồn kho thấp (≤ {{ low_thr }} code)</h6>
+            {% if low_stock_products %}
+            <table class="table table-sm mb-0">
+                <thead><tr><th>Sản phẩm</th><th>Brand</th><th class="text-right">Còn</th><th>Thao tác</th></tr></thead>
+                <tbody>
+                {% for p in low_stock_products %}
+                    <tr>
+                        <td>{{ p.name }}</td>
+                        <td>{{ brands.get(p.brand, p.brand) }}</td>
+                        <td class="text-right {% if p.stock_count == 0 %}text-danger font-weight-bold{% endif %}">{{ p.stock_count }}</td>
+                        <td><a href="{{ url_for('admin_stock', pid=p._id) }}" class="btn btn-sm btn-outline-primary">Nhập thêm code</a></td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% else %}<p class="text-muted mb-0">🎉 Tất cả sản phẩm auto đều đủ kho.</p>{% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+new Chart(document.getElementById('chartRevenue'), {
+    type: 'bar',
+    data: {
+        labels: {{ chart_labels|tojson }},
+        datasets: [
+            {
+                type: 'bar', label: 'Doanh thu (đ)',
+                data: {{ chart_rev|tojson }},
+                backgroundColor: 'rgba(45,17,254,.6)', yAxisID: 'y'
+            },
+            {
+                type: 'line', label: 'Số đơn',
+                data: {{ chart_cnt|tojson }},
+                borderColor: '#e67e22', backgroundColor: 'rgba(230,126,34,.15)',
+                yAxisID: 'y1', tension: .25
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        interaction: { intersect: false, mode: 'index' },
+        scales: {
+            y:  { position: 'left',  beginAtZero: true, title: { display: true, text: 'VNĐ' } },
+            y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false },
+                  title: { display: true, text: 'Đơn' } }
+        }
+    }
+});
+</script>
+
+{% endblock %}

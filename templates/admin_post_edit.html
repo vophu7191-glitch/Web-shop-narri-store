@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Sửa bài viết{% endblock %}
+{% block content %}
+
+<h4 class="mb-3">✏️ Sửa bài viết</h4>
+<a href="{{ url_for('admin_posts') }}" class="btn btn-sm btn-outline-secondary mb-3">← Quay lại danh sách</a>
+
+<div class="card p-4">
+    <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-group">
+            <label>Tiêu đề</label>
+            <input type="text" name="title" class="form-control" value="{{ p.title }}" required>
+        </div>
+        <div class="form-group">
+            <label>Nội dung</label>
+            <textarea name="content" class="form-control" rows="10" required>{{ p.content }}</textarea>
+        </div>
+        <button class="btn btn-primary">💾 Lưu thay đổi</button>
+        <a href="{{ url_for('admin_posts') }}" class="btn btn-outline-secondary">Huỷ</a>
+    </form>
+</div>
+
+{% endblock %}

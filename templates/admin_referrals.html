@@ -2,39 +2,51 @@
 {% block title %}Tiếp thị liên kết{% endblock %}
 {% block content %}
 
-<h4 class="mb-3">🔗 Tiếp thị liên kết</h4>
-<p class="text-muted small">Chỉ theo dõi ai giới thiệu ai — hệ thống chưa tự tính hoa hồng, admin tự cộng thưởng thủ công qua trang Quản lý thành viên nếu muốn.</p>
+<h4 class="mb-3">🤝 Tiếp thị liên kết (Referral)</h4>
+<p class="text-muted small">Hoa hồng được tự động cộng vào ví người giới thiệu khi người được giới thiệu MUA sản phẩm
+    (và cả khi NẠP tiền nếu bật trong Cấu hình). Tỷ lệ % và bật/tắt cấu hình tại
+    <a href="{{ url_for('admin_settings') }}">/admin/settings</a>.</p>
 
-<h6 class="mb-2">🏆 Top người giới thiệu</h6>
-<div class="table-responsive mb-4">
-<table class="table table-bordered bg-white">
-    <thead><tr><th>Tài khoản</th><th>Số người đã giới thiệu</th></tr></thead>
-    <tbody>
-    {% for r in top_referrers %}
-        <tr><td>{{ r.username }}</td><td>{{ r.count }}</td></tr>
-    {% else %}
-        <tr><td colspan="2" class="text-center text-muted py-4">Chưa có lượt giới thiệu nào.</td></tr>
-    {% endfor %}
-    </tbody>
-</table>
-</div>
-
-<h6 class="mb-2">📋 Danh sách đăng ký qua giới thiệu</h6>
-<div class="table-responsive">
-<table class="table table-bordered bg-white">
-    <thead><tr><th>Thời gian</th><th>Tài khoản mới</th><th>Được giới thiệu bởi</th></tr></thead>
-    <tbody>
-    {% for u in referred_users %}
-        <tr>
-            <td>{{ u.created_at.strftime("%d/%m/%Y %H:%M") }}</td>
-            <td>{{ u.username }}</td>
-            <td>{{ u.referrer_name }}</td>
-        </tr>
-    {% else %}
-        <tr><td colspan="3" class="text-center text-muted py-4">Chưa có ai đăng ký qua giới thiệu.</td></tr>
-    {% endfor %}
-    </tbody>
-</table>
+<div class="row">
+    <div class="col-md-6">
+        <div class="card p-3 mb-3">
+            <h6>🏆 Top người giới thiệu</h6>
+            <table class="table table-sm mb-0">
+                <thead><tr><th>#</th><th>Username</th><th class="text-right">Số ref</th><th class="text-right">Hoa hồng đã trả</th></tr></thead>
+                <tbody>
+                {% for r in top_referrers %}
+                    <tr>
+                        <td>{{ loop.index }}</td>
+                        <td>{{ r.username }}</td>
+                        <td class="text-right">{{ r.count }}</td>
+                        <td class="text-right text-success font-weight-bold">{{ "{:,}".format(r.earned) }}đ</td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="4" class="text-center text-muted py-3">Chưa có ai giới thiệu.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card p-3 mb-3">
+            <h6>👥 Người được giới thiệu (200 gần nhất)</h6>
+            <table class="table table-sm mb-0">
+                <thead><tr><th>Ngày</th><th>Người mới</th><th>Được giới thiệu bởi</th></tr></thead>
+                <tbody>
+                {% for r in referred_users %}
+                    <tr>
+                        <td class="small">{{ r.created_at.strftime("%d/%m %H:%M") }}</td>
+                        <td>{{ r.username }}</td>
+                        <td>{{ r.referrer_name }}</td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="3" class="text-center text-muted py-3">Chưa có người được ref.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 
 {% endblock %}

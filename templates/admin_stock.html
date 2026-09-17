@@ -2,27 +2,52 @@
 {% block title %}Nhập kho — {{ p.name }}{% endblock %}
 {% block content %}
 
-<h4 class="mb-3">📦 Nhập kho code — {{ p.name }} ({{ brands.get(p.brand, p.brand) }})</h4>
-<a href="{{ url_for('admin_products') }}" class="btn btn-sm btn-outline-secondary mb-3">← Quay lại danh sách sản phẩm</a>
+<h4 class="mb-3">📦 Kho code — {{ p.name }} ({{ brands.get(p.brand, p.brand) }})</h4>
+<div class="mb-3">
+    <a href="{{ url_for('admin_products') }}" class="btn btn-sm btn-outline-secondary">← Danh sách sản phẩm</a>
+    <a href="{{ url_for('admin_export_stock', pid=p._id) }}" class="btn btn-sm btn-outline-primary">⬇️ Xuất CSV toàn bộ code</a>
+    <form method="post" action="{{ url_for('admin_clear_stock', pid=p._id) }}" class="d-inline"
+          onsubmit="return confirm('Xoá TOÀN BỘ code chưa bán khỏi sản phẩm này?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-outline-danger">🗑️ Xoá hết code chưa bán</button>
+    </form>
+</div>
 
 <div class="card p-4 mb-4">
+    <h6>➕ Nhập kho — mỗi dòng 1 code</h6>
     <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="form-group">
-            <label>Dán danh sách code, mỗi dòng 1 code</label>
             <textarea name="codes" class="form-control" rows="8" placeholder="CODE-ABC123&#10;CODE-XYZ456&#10;..." required></textarea>
         </div>
         <button class="btn btn-primary">Nhập vào kho</button>
     </form>
 </div>
 
-<h6>Còn lại trong kho: {{ remaining|length }} code</h6>
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <h6 class="mb-0">Còn lại trong kho: <b>{{ remaining|length }}</b> · Đã bán: {{ sold_count }}</h6>
+</div>
+<div class="table-responsive">
 <table class="table table-bordered bg-white">
-    <thead><tr><th>Code</th><th>Ngày nhập</th></tr></thead>
+    <thead><tr><th>Code</th><th style="width:200px">Ngày nhập</th><th style="width:100px">Thao tác</th></tr></thead>
     <tbody>
     {% for c in remaining %}
-        <tr><td class="code-box">{{ c.code }}</td><td>{{ c.created_at.strftime("%d/%m/%Y %H:%M") }}</td></tr>
+        <tr>
+            <td class="code-box">{{ c.code }}</td>
+            <td>{{ c.created_at.strftime("%d/%m/%Y %H:%M") }}</td>
+            <td>
+                <form method="post" action="{{ url_for('admin_delete_stock_code', pid=p._id, sid=c._id) }}"
+                      onsubmit="return confirm('Xoá code này?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-sm btn-outline-danger">🗑️</button>
+                </form>
+            </td>
+        </tr>
+    {% else %}
+        <tr><td colspan="3" class="text-center text-muted py-3">Kho trống.</td></tr>
     {% endfor %}
     </tbody>
 </table>
+</div>
 
 {% endblock %}

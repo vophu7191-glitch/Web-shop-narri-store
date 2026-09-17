@@ -2,24 +2,46 @@
 {% block title %}Nhật ký hoạt động{% endblock %}
 {% block content %}
 
-<h4 class="mb-3">🗒️ Nhật ký hoạt động ({{ items|length }})</h4>
+<h4 class="mb-3">📋 Nhật ký hoạt động ({{ total }})</h4>
+
+<div class="card p-3 mb-3">
+    <form method="get" class="form-row">
+        <div class="col-md-4 form-group mb-2">
+            <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="🔎 Nội dung / username / IP">
+        </div>
+        <div class="col-md-2 form-group mb-2">
+            <input type="date" name="from" value="{{ from_str }}" class="form-control">
+        </div>
+        <div class="col-md-2 form-group mb-2">
+            <input type="date" name="to" value="{{ to_str }}" class="form-control">
+        </div>
+        <div class="col-md-2 form-group mb-2">
+            <input type="number" name="per" value="{{ per }}" min="5" max="200" class="form-control" title="Số dòng / trang">
+        </div>
+        <div class="col-md-2 form-group mb-2">
+            <button class="btn btn-primary btn-block">Lọc</button>
+        </div>
+    </form>
+</div>
 
 <div class="table-responsive">
 <table class="table table-bordered bg-white">
-    <thead><tr><th>Thời gian</th><th>Tài khoản</th><th>Nội dung</th><th>Địa chỉ IP</th></tr></thead>
+    <thead><tr><th style="width:170px">Thời gian</th><th>User</th><th>Nội dung</th><th style="width:140px">IP</th></tr></thead>
     <tbody>
     {% for a in items %}
         <tr>
             <td>{{ a.created_at.strftime("%d/%m/%Y %H:%M:%S") }}</td>
-            <td>{{ a.username }}</td>
+            <td>{{ a.username or a.user_id }}</td>
             <td>{{ a.content }}</td>
-            <td>{{ a.ip or '—' }}</td>
+            <td class="small text-muted">{{ a.ip or '—' }}</td>
         </tr>
     {% else %}
-        <tr><td colspan="4" class="text-center text-muted py-4">Chưa có hoạt động nào.</td></tr>
+        <tr><td colspan="4" class="text-center text-muted py-4">Không có bản ghi nào khớp bộ lọc.</td></tr>
     {% endfor %}
     </tbody>
 </table>
 </div>
+
+{% include "_pagination.html" %}
 
 {% endblock %}

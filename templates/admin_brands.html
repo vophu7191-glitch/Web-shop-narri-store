@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Quản lý nhóm / thương hiệu{% endblock %}
+{% block content %}
+
+<h4 class="mb-3">🏷️ Nhóm / thương hiệu ({{ items|length }})</h4>
+<p class="text-muted small">Nhóm dùng để phân loại sản phẩm trên trang chủ. Mã key chỉ chứa chữ thường/số/gạch dưới,
+    dùng làm URL anchor (VD <code>#brand-redfinger</code>). Không xoá được brand còn sản phẩm gắn vào.</p>
+
+<div class="card p-4 mb-4">
+    <h6>➕ Thêm brand mới</h6>
+    <form method="post" class="form-row" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="add">
+        <div class="col-md-2 form-group">
+            <label>Mã key</label>
+            <input type="text" name="key" class="form-control" placeholder="VD: momo_cloud" required>
+        </div>
+        <div class="col-md-3 form-group">
+            <label>Tên hiển thị</label>
+            <input type="text" name="label" class="form-control" placeholder="VD: MoMo Cloud" required>
+        </div>
+        <div class="col-md-3 form-group">
+            <label>Icon (Font Awesome class)</label>
+            <input type="text" name="icon" class="form-control" placeholder="fas fa-mobile-alt" value="fas fa-mobile-alt">
+        </div>
+        <div class="col-md-1 form-group">
+            <label>Thứ tự</label>
+            <input type="number" name="order" class="form-control" value="99">
+        </div>
+        <div class="col-md-3 d-flex align-items-end form-group">
+            <button class="btn btn-primary btn-block">Thêm brand</button>
+        </div>
+        <div class="col-md-6 form-group">
+            <label>Ảnh cover — upload (tuỳ chọn, banner đầu section)</label>
+            <input type="file" name="cover_file" accept="image/*" class="form-control-file">
+        </div>
+        <div class="col-md-6 form-group">
+            <label>… hoặc dán URL ảnh cover</label>
+            <input type="text" name="cover_url" class="form-control" placeholder="https://...">
+        </div>
+    </form>
+</div>
+
+<div class="table-responsive">
+<table class="table table-bordered bg-white">
+    <thead><tr><th>Cover</th><th>Icon</th><th>Key</th><th>Tên hiển thị</th><th>Thứ tự</th><th>SP</th><th>Trạng thái</th><th style="min-width:340px">Sửa nhanh / Thao tác</th></tr></thead>
+    <tbody>
+    {% for b in items %}
+        <tr>
+            <td>
+                {% if b.get('cover_url') %}
+                    <img src="{{ b.cover_url }}" alt="cover" style="width:110px;height:60px;object-fit:cover;border-radius:6px;">
+                {% else %}<span class="text-muted small">—</span>{% endif %}
+            </td>
+            <td><i class="{{ b.get('icon','fas fa-mobile-alt') }} fa-lg"></i></td>
+            <td><code>{{ b._id }}</code></td>
+            <td>{{ b.label }}</td>
+            <td>{{ b.order }}</td>
+            <td>{{ b.product_count }}</td>
+            <td>{% if b.enabled %}<span class="badge badge-success">Bật</span>{% else %}<span class="badge badge-secondary">Ẩn</span>{% endif %}</td>
+            <td>
+                <form method="post" action="{{ url_for('admin_edit_brand', key=b._id) }}" class="mb-1" enctype="multipart/form-data">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="form-inline mb-1">
+                        <input type="text" name="label" value="{{ b.label }}" class="form-control form-control-sm mr-1" style="width:130px" required>
+                        <input type="text" name="icon"  value="{{ b.get('icon','fas fa-mobile-alt') }}" class="form-control form-control-sm mr-1" style="width:170px">
+                        <input type="number" name="order" value="{{ b.order }}" class="form-control form-control-sm mr-1" style="width:70px">
+                    </div>
+                    <div class="form-inline">
+                        <input type="file" name="cover_file" accept="image/*" class="form-control-file form-control-sm mr-1" style="max-width:180px">
+                        <input type="text" name="cover_url" value="{{ b.get('cover_url','') }}" placeholder="hoặc URL cover" class="form-control form-control-sm mr-1" style="width:180px">
+                        <button class="btn btn-sm btn-outline-primary">💾 Lưu</button>
+                    </div>
+                </form>
+                <form method="post" action="{{ url_for('admin_toggle_brand', key=b._id) }}" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-sm btn-outline-secondary">{{ 'Ẩn' if b.enabled else 'Hiện' }}</button>
+                </form>
+                <form method="post" action="{{ url_for('admin_delete_brand', key=b._id) }}" class="d-inline"
+                      onsubmit="return confirm('Xoá brand này?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-sm btn-outline-danger" {% if b.product_count > 0 %}disabled title="Còn {{ b.product_count }} sản phẩm gắn brand"{% endif %}>🗑️</button>
+                </form>
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+
+{% endblock %}

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Xác thực 2FA{% endblock %}
+{% block content %}
+
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card p-4 mt-4 text-center">
+            <h4 class="mb-3">🔐 Xác thực 2 lớp</h4>
+            <p class="text-muted">Nhập mã 6 số từ ứng dụng Authenticator để tiếp tục vào trang admin.</p>
+
+            <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="next" value="{{ nxt }}">
+                <input type="text" name="code" class="form-control mx-auto"
+                       style="max-width:220px;letter-spacing:.3em;text-align:center;font-size:1.4rem;font-family:monospace;"
+                       placeholder="000000" autofocus required>
+                <button class="btn btn-primary mt-3">Xác thực</button>
+            </form>
+            <p class="text-muted small mt-3">Mất phone? Nhập <b>backup code</b> (8 ký tự HEX) vào ô trên — mỗi backup code chỉ dùng được 1 lần.</p>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

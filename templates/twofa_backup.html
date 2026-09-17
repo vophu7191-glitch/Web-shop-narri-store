@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Backup codes{% endblock %}
+{% block content %}
+
+<h4 class="mb-3">🔐 Backup codes 2FA</h4>
+<div class="card p-4">
+    <p>Còn lại <b>{{ remaining }}</b> backup code chưa dùng.</p>
+    <p class="text-muted small">Vì lý do bảo mật, backup codes chỉ hiện đầy đủ đúng 1 lần lúc bật 2FA.
+        Nếu cần code mới, hãy <b>tắt 2FA</b> rồi <b>bật lại</b> — bạn sẽ được cấp 8 code mới hoàn toàn.</p>
+    <a href="{{ url_for('admin_settings') }}" class="btn btn-outline-secondary">← Về Cấu hình</a>
+</div>
+
+{% endblock %}

@@ -20,6 +20,12 @@
                     <label>Nhập lại mật khẩu</label>
                     <input type="password" name="confirm" class="form-control" minlength="6" required>
                 </div>
+                {% if captcha_enabled %}
+                <div class="form-group">
+                    <label>Câu hỏi bảo vệ: <b>{{ captcha_q }}</b></label>
+                    <input type="text" name="captcha" class="form-control" placeholder="Nhập kết quả (số nguyên)" required>
+                </div>
+                {% endif %}
                 <button class="btn btn-primary btn-block">Đăng ký</button>
             </form>
             <p class="text-center mt-3 mb-0">Đã có tài khoản? <a href="{{ url_for('login') }}">Đăng nhập</a></p>

@@ -2,27 +2,127 @@
 {% block title %}Quản lý người dùng{% endblock %}
 {% block content %}
 
-<h4 class="mb-3">👥 Quản lý người dùng ({{ items|length }})</h4>
+<h4 class="mb-3">👥 Quản lý người dùng ({{ total }})
+    <a href="{{ url_for('admin_export_users') }}" class="btn btn-sm btn-outline-primary float-right">⬇️ Xuất CSV</a>
+</h4>
 
+<div class="card p-3 mb-3">
+    <form method="get" class="form-row">
+        <div class="col-md-4 form-group mb-2">
+            <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="🔎 Username hoặc ID">
+        </div>
+        <div class="col-md-2 form-group mb-2">
+            <select name="role" class="form-control">
+                <option value="">— Vai trò —</option>
+                <option value="admin" {% if role_f=='admin' %}selected{% endif %}>Admin</option>
+                <option value="user"  {% if role_f=='user'  %}selected{% endif %}>User</option>
+            </select>
+        </div>
+        <div class="col-md-2 form-group mb-2">
+            <input type="number" name="per" value="{{ per }}" min="5" max="200" class="form-control" title="Số dòng / trang">
+        </div>
+        <div class="col-md-2 form-group mb-2">
+            <button class="btn btn-primary btn-block">Lọc</button>
+        </div>
+    </form>
+</div>
+
+<div class="table-responsive">
 <table class="table table-bordered bg-white">
-    <thead><tr><th>Tên đăng nhập</th><th>Vai trò</th><th>Số dư</th><th>Ngày tạo</th><th>Điều chỉnh số dư</th></tr></thead>
+    <thead><tr>
+        <th>Username</th><th>Vai trò</th><th>Số dư</th><th>Hoa hồng ref</th>
+        <th>Ngày tạo</th><th style="min-width:520px">Hành động (cần nhập lý do)</th>
+    </tr></thead>
     <tbody>
     {% for u in items %}
-        <tr>
-            <td>{{ u.username }}</td>
-            <td>{% if u.role == 'admin' %}<span class="badge badge-warning">Admin</span>{% else %}Khách{% endif %}</td>
-            <td>{{ "{:,}".format(u.balance) }}đ</td>
-            <td>{{ u.created_at.strftime("%d/%m/%Y") }}</td>
+        <tr class="{% if u.blocked %}table-danger{% endif %}">
             <td>
-                <form method="post" class="form-inline">
+                {{ u.username }}
+                {% if u.blocked %}<span class="badge badge-danger ml-1">Đã khoá</span>{% endif %}
+                <div class="text-muted small">{{ u._id }}</div>
+            </td>
+            <td>
+                {% if u.role == 'admin' %}
+                    <span class="badge badge-warning">Admin</span>
+                    <div class="small text-muted">{{ u.get('admin_role','super') }}</div>
+                {% else %}Khách{% endif %}
+            </td>
+            <td>{{ "{:,}".format(u.balance) }}đ</td>
+            <td>{{ "{:,}".format(u.get('referral_earned', 0)) }}đ</td>
+            <td>{{ u.created_at.strftime("%d/%m/%Y") if u.created_at else "—" }}</td>
+            <td>
+                <!-- Điều chỉnh số dư -->
+                <form method="post" class="form-inline mb-1">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="uid" value="{{ u._id }}">
-                    <input type="number" name="delta" class="form-control form-control-sm mr-2" style="width:120px" placeholder="+/-VNĐ" required>
-                    <button class="btn btn-sm btn-primary">Áp dụng</button>
+                    <input type="hidden" name="action" value="adjust">
+                    <input type="number" name="delta" class="form-control form-control-sm mr-1" style="width:120px" placeholder="+/- VNĐ" required>
+                    <input type="text"   name="note"  class="form-control form-control-sm mr-1" style="width:180px" placeholder="Lý do (ghi log)">
+                    <button class="btn btn-sm btn-primary">Cộng/Trừ</button>
                 </form>
+
+                <!-- Đổi role -->
+                <form method="post" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="uid" value="{{ u._id }}">
+                    <input type="hidden" name="action" value="toggle_role">
+                    <button class="btn btn-sm btn-outline-warning"
+                            onclick="return confirm('Đổi vai trò của {{ u.username }}?');">
+                        {% if u.role == 'admin' %}🔽 Hạ về user{% else %}🔼 Cấp admin{% endif %}
+                    </button>
+                </form>
+
+                <!-- Khoá / mở khoá -->
+                <form method="post" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="uid" value="{{ u._id }}">
+                    <input type="hidden" name="action" value="toggle_block">
+                    <button class="btn btn-sm btn-outline-{{ 'success' if u.blocked else 'danger' }}"
+                            onclick="return confirm('{{ 'Mở khoá' if u.blocked else 'Khoá' }} tài khoản {{ u.username }}?');">
+                        {{ '🔓 Mở khoá' if u.blocked else '🔒 Khoá' }}
+                    </button>
+                </form>
+
+                <!-- Reset mật khẩu (dropdown) -->
+                <form method="post" class="form-inline d-inline-block ml-1">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="uid" value="{{ u._id }}">
+                    <input type="hidden" name="action" value="reset_password">
+                    <input type="text" name="new_password" class="form-control form-control-sm mr-1" style="width:150px" placeholder="Mật khẩu mới ≥6 ký tự" minlength="6">
+                    <button class="btn btn-sm btn-outline-info"
+                            onclick="return confirm('Reset mật khẩu cho {{ u.username }}?');">🔑 Reset</button>
+                </form>
+
+                <!-- Xoá -->
+                <form method="post" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="uid" value="{{ u._id }}">
+                    <input type="hidden" name="action" value="delete">
+                    <button class="btn btn-sm btn-outline-dark"
+                            onclick="return confirm('Xoá HẲN tài khoản {{ u.username }}? (Chỉ xoá được khi số dư = 0)');">🗑️</button>
+                </form>
+
+                <!-- v5 D: đổi admin_role (chỉ hiện với admin) -->
+                {% if u.role == 'admin' %}
+                <form method="post" action="{{ url_for('admin_set_admin_role', uid=u._id) }}" class="form-inline d-inline ml-1">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <select name="admin_role" class="form-control form-control-sm mr-1" style="width:100px">
+                        <option value="super" {% if u.get('admin_role','super')=='super' %}selected{% endif %}>super</option>
+                        <option value="mod"   {% if u.get('admin_role','super')=='mod'   %}selected{% endif %}>mod</option>
+                        <option value="sales" {% if u.get('admin_role','super')=='sales' %}selected{% endif %}>sales</option>
+                    </select>
+                    <button class="btn btn-sm btn-outline-info">Cấp</button>
+                </form>
+                {% endif %}
             </td>
         </tr>
+    {% else %}
+        <tr><td colspan="6" class="text-center text-muted py-4">Không có user nào khớp bộ lọc.</td></tr>
     {% endfor %}
     </tbody>
 </table>
+</div>
+
+{% include "_pagination.html" %}
 
 {% endblock %}

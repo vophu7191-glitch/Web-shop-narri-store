@@ -5,42 +5,256 @@
 <h4 class="mb-3">⚙️ Cấu hình hệ thống</h4>
 
 <div class="card p-4">
-    <form method="post">
+    <form method="post" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <h6 class="mt-2">🏪 Thông tin cửa hàng</h6>
         <div class="form-group">
             <label>Tên shop</label>
             <input type="text" name="site_name" class="form-control" value="{{ cfg.site_name }}">
         </div>
-        <hr>
-        <h6>Ngân hàng nhận tiền (dùng để tạo QR nạp ví)</h6>
-        <div class="form-group">
-            <label>Mã BIN ngân hàng (VD MBBank = 970422)</label>
-            <input type="text" name="bank_bin" class="form-control" value="{{ cfg.bank_bin }}">
+        <div class="form-row">
+            <div class="col-md-6 form-group">
+                <label>Zalo hỗ trợ (số điện thoại)</label>
+                <input type="text" name="contact_zalo" class="form-control" value="{{ cfg.contact_zalo }}">
+            </div>
+            <div class="col-md-6 form-group">
+                <label>Telegram hỗ trợ (@username hoặc link)</label>
+                <input type="text" name="contact_telegram" class="form-control" value="{{ cfg.contact_telegram }}">
+            </div>
         </div>
         <div class="form-group">
-            <label>Số tài khoản</label>
-            <input type="text" name="bank_account_number" class="form-control" value="{{ cfg.bank_account_number }}">
-        </div>
-        <div class="form-group">
-            <label>Tên chủ tài khoản</label>
-            <input type="text" name="bank_account_name" class="form-control" value="{{ cfg.bank_account_name }}">
-        </div>
-        <hr>
-        <h6>Thông báo trên trang chủ</h6>
-        <div class="form-group">
-            <label>Nội dung thông báo (để trống nếu không muốn hiện)</label>
+            <label>Thông báo hiển thị trên trang chủ</label>
             <textarea name="announcement" class="form-control" rows="2">{{ cfg.announcement }}</textarea>
         </div>
+
         <hr>
-        <h6>SePay Webhook</h6>
+        <h6>🎨 Trang trí (logo, favicon, nền ví)</h6>
+        <div class="form-row">
+            <div class="col-md-4 form-group">
+                <label>Logo — upload file</label>
+                <input type="file" name="logo_file" accept="image/*" class="form-control-file">
+            </div>
+            <div class="col-md-6 form-group">
+                <label>… hoặc URL logo (PNG trong suốt đẹp nhất, cao 32-40px)</label>
+                <input type="text" name="logo_url" class="form-control" value="{{ cfg.get('logo_url','') }}" placeholder="https://... hoặc /static/images/logo_dark_UNE.png">
+            </div>
+            <div class="col-md-2 form-group">
+                {% if cfg.get('logo_url') %}
+                <label class="small text-muted">Đang dùng</label>
+                <div><img src="{{ cfg.logo_url }}" style="max-height:40px;max-width:100%;background:#2D11FE;padding:4px;border-radius:6px;"></div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="col-md-4 form-group">
+                <label>Favicon — upload (PNG 32×32 hoặc 64×64)</label>
+                <input type="file" name="favicon_file" accept="image/png,image/x-icon" class="form-control-file">
+            </div>
+            <div class="col-md-6 form-group">
+                <label>… hoặc URL favicon</label>
+                <input type="text" name="favicon_url" class="form-control" value="{{ cfg.get('favicon_url','') }}" placeholder="https://...">
+            </div>
+            <div class="col-md-2 form-group">
+                {% if cfg.get('favicon_url') %}
+                <label class="small text-muted">Đang dùng</label>
+                <div><img src="{{ cfg.favicon_url }}" style="max-height:40px;"></div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="col-md-4 form-group">
+                <label>Ảnh nền khối QR (trang Ví) — upload</label>
+                <input type="file" name="wallet_bg_file" accept="image/*" class="form-control-file">
+            </div>
+            <div class="col-md-6 form-group">
+                <label>… hoặc URL ảnh nền</label>
+                <input type="text" name="wallet_bg_url" class="form-control" value="{{ cfg.get('wallet_bg_url','') }}">
+            </div>
+            <div class="col-md-2 form-group">
+                {% if cfg.get('wallet_bg_url') %}
+                <label class="small text-muted">Đang dùng</label>
+                <div><img src="{{ cfg.wallet_bg_url }}" style="max-height:40px;max-width:100%;object-fit:cover;border-radius:4px;"></div>
+                {% endif %}
+            </div>
+        </div>
+
+        <hr>
+        <h6>🏦 Ngân hàng nhận tiền (dùng để tạo QR nạp ví)</h6>
+        <div class="form-row">
+            <div class="col-md-4 form-group">
+                <label>Mã BIN ngân hàng (VD MBBank = 970422)</label>
+                <input type="text" name="bank_bin" class="form-control" value="{{ cfg.bank_bin }}">
+            </div>
+            <div class="col-md-4 form-group">
+                <label>Số tài khoản</label>
+                <input type="text" name="bank_account_number" class="form-control" value="{{ cfg.bank_account_number }}">
+            </div>
+            <div class="col-md-4 form-group">
+                <label>Tên chủ tài khoản</label>
+                <input type="text" name="bank_account_name" class="form-control" value="{{ cfg.bank_account_name }}">
+            </div>
+        </div>
+
+        <hr>
+        <h6>🔗 SePay Webhook</h6>
         <div class="form-group">
             <label>API Key (đặt giống hệt bên SePay Dashboard → Webhooks → Bảo mật → API Key)</label>
             <input type="text" name="sepay_api_key" class="form-control" value="{{ cfg.sepay_api_key }}">
         </div>
-        <p class="text-muted small">
-            Webhook URL cần cấu hình bên SePay: <code>{{ webhook_url }}</code>
-        </p>
-        <button class="btn btn-primary">Lưu cấu hình</button>
+        <p class="text-muted small">Webhook URL cần cấu hình bên SePay: <code>{{ webhook_url }}</code></p>
+
+        <hr>
+        <h6>📦 Kho hàng &amp; giới hạn</h6>
+        <div class="form-row">
+            <div class="col-md-4 form-group">
+                <label>Ngưỡng cảnh báo tồn kho thấp (≤ code)</label>
+                <input type="number" name="low_stock_threshold" class="form-control" value="{{ cfg.low_stock_threshold }}" min="0">
+            </div>
+            <div class="col-md-4 form-group">
+                <label>Số tiền nạp tối thiểu (VNĐ, 0 = không giới hạn)</label>
+                <input type="number" name="min_deposit" class="form-control" value="{{ cfg.min_deposit }}" min="0">
+            </div>
+        </div>
+
+        <hr>
+        <h6>📲 Telegram forward (nhận thông báo qua Telegram)</h6>
+        <div class="form-row">
+            <div class="col-md-6 form-group">
+                <label>Bot token (tạo bot qua @BotFather)</label>
+                <input type="text" name="telegram_bot_token" class="form-control" value="{{ cfg.get('telegram_bot_token','') }}" placeholder="123456:AAF...">
+            </div>
+            <div class="col-md-6 form-group">
+                <label>Chat ID (dùng /getChat hoặc @userinfobot để lấy)</label>
+                <input type="text" name="telegram_chat_id" class="form-control" value="{{ cfg.get('telegram_chat_id','') }}" placeholder="-100xxxxxxxxxx hoặc user id">
+            </div>
+        </div>
+
+        <hr>
+        <h6>🛡️ Bảo mật & giới hạn</h6>
+        <div class="form-row">
+            <div class="col-md-3 form-group d-flex align-items-end">
+                <div class="custom-control custom-checkbox">
+                    <input type="checkbox" class="custom-control-input" id="captchaChk" name="captcha_enabled" value="1" {% if cfg.captcha_enabled %}checked{% endif %}>
+                    <label class="custom-control-label" for="captchaChk">Bật CAPTCHA khi đăng ký</label>
+                </div>
+            </div>
+            <div class="col-md-3 form-group d-flex align-items-end">
+                <div class="custom-control custom-checkbox">
+                    <input type="checkbox" class="custom-control-input" id="reviewChk" name="reviews_enabled" value="1" {% if cfg.reviews_enabled %}checked{% endif %}>
+                    <label class="custom-control-label" for="reviewChk">Bật đánh giá sản phẩm</label>
+                </div>
+            </div>
+            <div class="col-md-3 form-group">
+                <label>Giới hạn số đơn/1 khách/1 SP (0 = ∞)</label>
+                <input type="number" name="purchase_limit_per_user" value="{{ cfg.get('purchase_limit_per_user', 0) }}" class="form-control" min="0">
+            </div>
+            <div class="col-md-3 form-group">
+                <label>Giới hạn số đơn/1 khách/24h (0 = ∞)</label>
+                <input type="number" name="purchase_limit_per_day" value="{{ cfg.get('purchase_limit_per_day', 0) }}" class="form-control" min="0">
+            </div>
+        </div>
+
+        <hr>
+        <h6>🔎 SEO</h6>
+        <div class="form-row">
+            <div class="col-md-12 form-group">
+                <label>Meta description (≤300 ký tự)</label>
+                <textarea name="seo_description" class="form-control" rows="2" maxlength="300">{{ cfg.get('seo_description','') }}</textarea>
+            </div>
+            <div class="col-md-12 form-group">
+                <label>Meta keywords (cách nhau bởi dấu phẩy, ≤200 ký tự)</label>
+                <input type="text" name="seo_keywords" class="form-control" maxlength="200" value="{{ cfg.get('seo_keywords','') }}">
+            </div>
+        </div>
+        <p class="text-muted small">Sitemap tự động sinh tại <a href="{{ url_for('sitemap') }}" target="_blank">/sitemap.xml</a> · <a href="{{ url_for('robots') }}" target="_blank">/robots.txt</a></p>
+
+        <hr>
+        <h6>🤝 Hoa hồng giới thiệu (Referral)</h6>
+        <div class="form-row">
+            <div class="col-md-4 form-group">
+                <label>% hoa hồng (0 = tắt)</label>
+                <input type="number" step="0.1" name="referral_percent" class="form-control" value="{{ cfg.referral_percent }}" min="0">
+            </div>
+            <div class="col-md-8 form-group d-flex align-items-end">
+                <div class="custom-control custom-checkbox">
+                    <input type="checkbox" class="custom-control-input" id="refOnRecharge" name="referral_on_recharge" value="1" {% if cfg.referral_on_recharge %}checked{% endif %}>
+                    <label class="custom-control-label" for="refOnRecharge">Cộng hoa hồng cả khi ref NẠP TIỀN (mặc định: chỉ khi ref MUA)</label>
+                </div>
+            </div>
+        </div>
+
+        <button class="btn btn-primary">💾 Lưu cấu hình</button>
     </form>
+</div>
+
+<div class="card p-4 mt-4">
+    <h6>🔐 Xác thực 2 lớp (2FA) cho tài khoản admin của bạn</h6>
+    {% if not has_pyotp %}
+        <div class="alert alert-warning mb-0">
+            Server chưa cài <code>pyotp</code> / <code>qrcode[pil]</code> — không dùng được 2FA.
+            Chạy: <code>pip install pyotp qrcode[pil]</code>
+        </div>
+    {% elif current_user.get('totp_secret') %}
+        <p>2FA đang <b class="text-success">BẬT</b>{% if current_user.get('totp_enabled_at') %} từ {{ current_user.totp_enabled_at.strftime("%d/%m/%Y %H:%M") }}{% endif %}.</p>
+        <a href="{{ url_for('twofa_backup') }}" class="btn btn-sm btn-outline-secondary mr-2">Xem backup codes còn lại</a>
+        <form method="post" action="{{ url_for('twofa_disable') }}" class="form-inline mt-2"
+              onsubmit="return confirm('Tắt 2FA cho tài khoản của bạn?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="password" name="password" class="form-control form-control-sm mr-2" placeholder="Mật khẩu hiện tại" required>
+            <input type="text" name="code" class="form-control form-control-sm mr-2" placeholder="Mã 6 số" required style="width:110px;letter-spacing:.15em;font-family:monospace;">
+            <button class="btn btn-sm btn-outline-danger">Tắt 2FA</button>
+        </form>
+    {% else %}
+        <p>Chưa bật. 2FA giúp chặn kẻ đánh cắp mật khẩu — bắt buộc nhập mã 6 số từ app Authenticator mỗi lần vào trang admin.</p>
+        <a href="{{ url_for('twofa_setup') }}" class="btn btn-primary">🔒 Bật 2FA cho tài khoản này</a>
+    {% endif %}
+</div>
+
+<div class="card p-4 mt-4">
+    <h6>🤖 API Key cho bot Discord / integration</h6>
+    <p class="text-muted small">Bot Discord (hoặc bất kỳ ứng dụng nào) dùng key này để gọi các endpoint READ-ONLY dưới đây.</p>
+    <div class="form-group">
+        <label>API Key hiện tại</label>
+        <div class="input-group">
+            <input type="text" id="apiKey" class="form-control code-box" value="{{ cfg.get('bot_api_key','') or '(chưa tạo)' }}" readonly>
+            <div class="input-group-append">
+                {% if cfg.get('bot_api_key') %}
+                <button type="button" class="btn btn-outline-primary" onclick="var i=document.getElementById('apiKey');i.select();document.execCommand('copy');this.textContent='✅ Đã copy';">Copy</button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div>
+        <form method="post" action="{{ url_for('admin_regen_api_key') }}" class="d-inline"
+              onsubmit="return confirm('Tạo API key MỚI? Key cũ sẽ ngừng hoạt động ngay.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-warning">🔁 Tạo key mới</button>
+        </form>
+        {% if cfg.get('bot_api_key') %}
+        <form method="post" action="{{ url_for('admin_clear_api_key') }}" class="d-inline"
+              onsubmit="return confirm('XOÁ API key? API sẽ tắt hoàn toàn.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-outline-danger">🗑️ Xoá key (tắt API)</button>
+        </form>
+        {% endif %}
+    </div>
+
+    <hr>
+    <p><b>Cách dùng:</b> gửi header <code>X-API-Key: &lt;key&gt;</code> (hoặc query <code>?api_key=&lt;key&gt;</code>) tới các endpoint:</p>
+    <ul class="small mb-0" style="font-family:monospace;">
+        <li>GET <code>{{ api_base }}/ping</code> — test kết nối</li>
+        <li>GET <code>{{ api_base }}/stats</code> — thống kê doanh thu / user / kho</li>
+        <li>GET <code>{{ api_base }}/users?q=&amp;limit=50</code> — danh sách user</li>
+        <li>GET <code>{{ api_base }}/users/&lt;id-hoặc-username&gt;</code> — chi tiết user</li>
+        <li>GET <code>{{ api_base }}/orders?status=pending&amp;user_id=&amp;limit=50</code> — danh sách đơn</li>
+        <li>GET <code>{{ api_base }}/orders/&lt;order_id&gt;</code> — chi tiết đơn</li>
+        <li>GET <code>{{ api_base }}/products?brand=redfinger</code> — danh sách sản phẩm + tồn kho</li>
+        <li>GET <code>{{ api_base }}/recharges?user_id=&amp;limit=50</code> — lịch sử nạp tiền</li>
+    </ul>
+    <p class="text-muted small mt-2"><b>Ví dụ (Python):</b><br>
+        <code>requests.get("{{ api_base }}/stats", headers={"X-API-Key": "&lt;key&gt;"}).json()</code>
+    </p>
 </div>
 
 {% endblock %}

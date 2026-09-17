@@ -2,24 +2,57 @@
 {% block title %}Lịch sử nạp tiền{% endblock %}
 {% block content %}
 
-<h4 class="mb-3">💳 Lịch sử nạp tiền ({{ items|length }})</h4>
+<h4 class="mb-3">💳 Lịch sử nạp tiền ({{ total }})
+    <a href="{{ url_for('admin_export_recharges') }}" class="btn btn-sm btn-outline-primary float-right">⬇️ Xuất CSV</a>
+</h4>
+
+<div class="card p-3 mb-3">
+    <form method="get" class="form-row">
+        <div class="col-md-4 form-group mb-2">
+            <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="🔎 Username / user_id / ngân hàng">
+        </div>
+        <div class="col-md-2 form-group mb-2">
+            <input type="date" name="from" value="{{ from_str }}" class="form-control">
+        </div>
+        <div class="col-md-2 form-group mb-2">
+            <input type="date" name="to" value="{{ to_str }}" class="form-control">
+        </div>
+        <div class="col-md-2 form-group mb-2">
+            <input type="number" name="per" value="{{ per }}" min="5" max="200" class="form-control" title="Số dòng / trang">
+        </div>
+        <div class="col-md-2 form-group mb-2">
+            <button class="btn btn-primary btn-block">Lọc</button>
+        </div>
+    </form>
+</div>
 
 <div class="table-responsive">
 <table class="table table-bordered bg-white">
-    <thead><tr><th>Thời gian</th><th>Tài khoản</th><th>Số tiền</th><th>Cổng/Ngân hàng</th></tr></thead>
+    <thead><tr><th>Thời gian</th><th>Tài khoản</th><th>Số tiền</th><th>Cổng / Ngân hàng</th><th>Nguồn</th><th>Ghi chú</th></tr></thead>
     <tbody>
     {% for r in items %}
         <tr>
             <td>{{ r.created_at.strftime("%d/%m/%Y %H:%M:%S") }}</td>
             <td>{{ r.username }}</td>
-            <td class="text-success font-weight-bold">+{{ "{:,}".format(r.amount) }}đ</td>
+            <td class="{{ 'text-success' if r.amount>=0 else 'text-danger' }} font-weight-bold">
+                {{ '{:+,}'.format(r.amount) }}đ
+            </td>
             <td>{{ r.bank or '—' }}</td>
+            <td>
+                {% if r.source == 'manual' %}<span class="badge badge-warning">Thủ công</span>
+                {% elif r.source == 'sepay' %}<span class="badge badge-info">SePay</span>
+                {% else %}—{% endif %}
+                {% if r.admin %}<div class="small text-muted">bởi {{ r.admin }}</div>{% endif %}
+            </td>
+            <td class="small text-muted">{{ r.note or '' }}</td>
         </tr>
     {% else %}
-        <tr><td colspan="4" class="text-center text-muted py-4">Chưa có giao dịch nạp tiền nào.</td></tr>
+        <tr><td colspan="6" class="text-center text-muted py-4">Chưa có giao dịch nào khớp bộ lọc.</td></tr>
     {% endfor %}
     </tbody>
 </table>
 </div>
+
+{% include "_pagination.html" %}
 
 {% endblock %}

@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}{{ p.name }}{% endblock %}
+{% block content %}
+
+<a href="{{ url_for('home') }}#brand-{{ p.brand }}" class="btn btn-sm btn-outline-secondary mb-3">← Về danh sách</a>
+
+<div class="row">
+    <div class="col-md-5">
+        <div class="card product-card">
+            <div class="product-thumb" style="height:240px;">
+                {% if p.image_url %}
+                    <img src="{{ p.image_url }}" alt="{{ p.name }}">
+                {% else %}
+                    <div class="product-thumb-fallback"><i class="{{ brand_icons.get(p.brand,'fas fa-mobile-alt') }} fa-3x"></i></div>
+                {% endif %}
+            </div>
+            <div class="product-title-bar">{{ p.name }}</div>
+        </div>
+    </div>
+    <div class="col-md-7">
+        <div class="card p-4">
+            <h4>{{ p.name }}</h4>
+            <p class="text-muted">{{ brands.get(p.brand, p.brand) }}</p>
+            <p>{{ p.description }}</p>
+
+            {% if rating.count %}
+            <p>⭐ <b>{{ rating.avg }}</b>/5 ({{ rating.count }} đánh giá)</p>
+            {% endif %}
+
+            <div class="price-box mb-3">{{ "{:,}".format(p.price) }} đ</div>
+
+            {% if current_user %}
+            <form method="post" action="{{ url_for('buy', product_id=p._id) }}" onsubmit="return confirm('Xác nhận mua {{ p.name }}?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                {% if p.get('fulfillment') == 'manual' %}
+                <div class="form-group">
+                    <label>Ghi chú cho admin</label>
+                    <input type="text" name="note" class="form-control" placeholder="Tuỳ chọn: tài khoản game, yêu cầu...">
+                </div>
+                {% endif %}
+                <div class="form-row align-items-end">
+                    <div class="col-md-6 form-group">
+                        <label>Mã coupon (tuỳ chọn)</label>
+                        <input type="text" name="coupon" id="couponInput" class="form-control" placeholder="VD: SALE10" style="text-transform:uppercase;">
+                        <div id="couponResult" class="small mt-1"></div>
+                    </div>
+                    <div class="col-md-6 form-group">
+                        <button type="button" onclick="checkCoupon({{ p.price }})" class="btn btn-outline-primary btn-sm mb-1">Kiểm tra</button>
+                        <button class="btn btn-primary btn-block" {% if p.stock_count == 0 %}disabled{% endif %}>🎫 Mua ngay</button>
+                    </div>
+                </div>
+            </form>
+            <script>
+            function checkCoupon(basePrice) {
+                var code = document.getElementById('couponInput').value.trim();
+                if (!code) { document.getElementById('couponResult').innerHTML = ''; return; }
+                var fd = new FormData();
+                fd.append('csrf_token', '{{ csrf_token() }}');
+                fd.append('code', code); fd.append('amount', basePrice);
+                fetch('{{ url_for("api_coupon_check") }}', {method:'POST', body:fd, credentials:'same-origin'})
+                    .then(r => r.json()).then(d => {
+                        if (d.ok) {
+                            document.getElementById('couponResult').innerHTML =
+                                '<span class="text-success">✅ Giảm ' + d.discount.toLocaleString('vi-VN') + 'đ → còn <b>' + d.final.toLocaleString('vi-VN') + 'đ</b></span>';
+                        } else {
+                            document.getElementById('couponResult').innerHTML =
+                                '<span class="text-danger">❌ ' + (d.message || 'Mã không hợp lệ') + '</span>';
+                        }
+                    });
+            }
+            </script>
+            {% else %}
+                <a href="{{ url_for('login') }}" class="btn btn-primary btn-block">Đăng nhập để mua</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="card p-4 mt-3">
+    <h5 class="mb-3">💬 Đánh giá ({{ rating.count }})</h5>
+    {% if can_review and cfg.reviews_enabled %}
+    <form method="post" action="{{ url_for('product_review', pid=p._id) }}" class="mb-3">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-row">
+            <div class="col-md-2 form-group">
+                <label>Số sao</label>
+                <select name="rating" class="form-control">
+                    {% for s in [5,4,3,2,1] %}
+                    <option value="{{ s }}" {% if my_review and my_review.rating == s %}selected{% endif %}>{{ '⭐' * s }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-8 form-group">
+                <label>Nhận xét</label>
+                <input type="text" name="content" class="form-control" maxlength="500" value="{{ my_review.content if my_review else '' }}" placeholder="Chia sẻ trải nghiệm...">
+            </div>
+            <div class="col-md-2 d-flex align-items-end form-group">
+                <button class="btn btn-primary btn-block">{{ 'Cập nhật' if my_review else 'Gửi' }}</button>
+            </div>
+        </div>
+    </form>
+    {% elif current_user %}
+    <p class="text-muted">Bạn cần mua sản phẩm này rồi mới được đánh giá.</p>
+    {% endif %}
+
+    {% for r in reviews %}
+    <div class="border-bottom py-2">
+        <div class="d-flex justify-content-between">
+            <div><b>{{ r.username }}</b> — <span class="text-warning">{{ '⭐' * r.rating }}</span></div>
+            <div class="small text-muted">{{ r.created_at|timeago }}</div>
+        </div>
+        {% if r.content %}<div class="mt-1">{{ r.content }}</div>{% endif %}
+        {% if current_user and current_user.role == 'admin' %}
+        <form method="post" action="{{ url_for('admin_delete_review', rid=r._id) }}" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-outline-danger">Xoá</button>
+        </form>
+        {% endif %}
+    </div>
+    {% else %}
+    <p class="text-muted mb-0">Chưa có đánh giá nào.</p>
+    {% endfor %}
+</div>
+
+{% endblock %}

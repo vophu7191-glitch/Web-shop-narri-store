@@ -1,0 +1,32 @@
+{# Component phân trang dùng chung. Giữ nguyên các query string khác (?q=&status=&from=&to=&per=) #}
+{% if total_pages and total_pages > 1 %}
+<nav aria-label="pagination" class="mt-3">
+    <ul class="pagination">
+        {% set args = request.args.to_dict() %}
+        {% set _ = args.pop('page', None) %}
+        {% set qs = args|urlencode %}
+        <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+            <a class="page-link" href="?page={{ page-1 }}{% if qs %}&{{ qs }}{% endif %}">« Trước</a>
+        </li>
+        {% set start = [page-3, 1]|max %}
+        {% set end   = [page+3, total_pages]|min %}
+        {% if start > 1 %}
+            <li class="page-item"><a class="page-link" href="?page=1{% if qs %}&{{ qs }}{% endif %}">1</a></li>
+            {% if start > 2 %}<li class="page-item disabled"><span class="page-link">…</span></li>{% endif %}
+        {% endif %}
+        {% for i in range(start, end+1) %}
+            <li class="page-item {% if i == page %}active{% endif %}">
+                <a class="page-link" href="?page={{ i }}{% if qs %}&{{ qs }}{% endif %}">{{ i }}</a>
+            </li>
+        {% endfor %}
+        {% if end < total_pages %}
+            {% if end < total_pages - 1 %}<li class="page-item disabled"><span class="page-link">…</span></li>{% endif %}
+            <li class="page-item"><a class="page-link" href="?page={{ total_pages }}{% if qs %}&{{ qs }}{% endif %}">{{ total_pages }}</a></li>
+        {% endif %}
+        <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+            <a class="page-link" href="?page={{ page+1 }}{% if qs %}&{{ qs }}{% endif %}">Sau »</a>
+        </li>
+    </ul>
+    <div class="text-muted small">Trang {{ page }}/{{ total_pages }} · Tổng {{ total }} bản ghi</div>
+</nav>
+{% endif %}
