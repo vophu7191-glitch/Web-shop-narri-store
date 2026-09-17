@@ -1,3 +1,5 @@
 flask
 pymongo[srv]
 waitress
+pyotp
+qrcode[pil]
