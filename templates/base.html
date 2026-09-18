@@ -74,7 +74,7 @@
 <body>
 
 <div id="pageLoader">
-    <img src="{{ url_for('static', filename='images/gif_loaderRP3.png') }}" alt="Đang tải..." style="width:72px;">
+    <img src="{{ url_for('static', filename='images/gif_loaderRP3.gif') }}" alt="Đang tải..." style="width:72px;">
 </div>
 
 <div class="wrapper">
@@ -237,10 +237,42 @@
 </div>
 
 <script>
-    window.addEventListener('load', function () {
+    var MIN_LOADER_MS = 400;
+    var loaderShownAt = Date.now();
+
+    function showLoader() {
         var l = document.getElementById('pageLoader');
-        if (l) { l.style.opacity = '0'; setTimeout(function () { l.style.display = 'none'; }, 300); }
+        if (!l) return;
+        l.style.display = 'flex';
+        l.style.opacity = '1';
+        loaderShownAt = Date.now();
+    }
+    function hideLoader() {
+        var l = document.getElementById('pageLoader');
+        if (!l) return;
+        var wait = Math.max(0, MIN_LOADER_MS - (Date.now() - loaderShownAt));
+        setTimeout(function () {
+            l.style.opacity = '0';
+            setTimeout(function () { l.style.display = 'none'; }, 300);
+        }, wait);
+    }
+    window.addEventListener('load', hideLoader);
+
+    // Hiện lại loader ngay khi bấm sang trang khác (link nội bộ) hoặc submit form,
+    // vì nếu chỉ chờ window.load của trang mới thì tải quá nhanh, mắt không kịp thấy.
+    document.addEventListener('click', function (e) {
+        var a = e.target.closest('a[href]');
+        if (!a || a.target === '_blank' || a.hasAttribute('download')) return;
+        var href = a.getAttribute('href') || '';
+        if (/^(#|javascript:|mailto:|tel:)/.test(href)) return;
+        if (e.metaKey || e.ctrlKey || e.shiftKey) return;
+        try {
+            if (new URL(a.href, window.location.href).origin !== window.location.origin) return;
+        } catch (err) { return; }
+        showLoader();
     });
+    document.addEventListener('submit', function () { showLoader(); });
+
     (function () {
         function spawnHeart() {
             var h = document.createElement('div');
