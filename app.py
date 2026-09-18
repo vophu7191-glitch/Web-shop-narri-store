@@ -203,31 +203,9 @@ class _EventHub:
 
 _hub = _EventHub()
 
-
-@app.route("/admin/stream")
-@admin_required
-def admin_stream():
-    """Server-Sent Events endpoint — admin mở trang giữ kết nối, nhận push realtime."""
-    def gen():
-        q = _hub.subscribe()
-        try:
-            # Send hello để client biết đã kết nối
-            yield f"event: hello\ndata: {json.dumps({'subs': _hub.n_subs()})}\n\n"
-            while True:
-                try:
-                    msg = q.get(timeout=25)
-                    yield f"event: notify\ndata: {msg}\n\n"
-                except queue.Empty:
-                    # heartbeat để proxy không tự đóng kết nối idle
-                    yield ": ping\n\n"
-        finally:
-            _hub.unsubscribe(q)
-    resp = Response(stream_with_context(gen()), mimetype="text/event-stream")
-    resp.headers["Cache-Control"] = "no-cache"
-    resp.headers["X-Accel-Buffering"] = "no"  # tắt buffering ở Nginx
-    return resp
-
-
+# NOTE: Định nghĩa `notify_admins` sớm (không kèm @admin_required) để `buy()`
+# và `sepay_webhook()` gọi được. Các ROUTE SSE (@admin_required) chuyển xuống
+# SAU khối định nghĩa `admin_required` — xem cuối file.
 def notify_admins(kind: str, title: str, message: str, url: str = "", meta: dict = None):
     """Đẩy 1 sự kiện realtime tới mọi admin đang online (+ ghi vào col_notifications)."""
     ev = {
@@ -245,38 +223,12 @@ def notify_admins(kind: str, title: str, message: str, url: str = "", meta: dict
     except Exception as e:
         print(f"[notify] Không lưu notification được: {e}")
     _hub.publish(ev)
-    # v5 E: forward qua Telegram (nếu bật)
+    # v5 E: forward qua Telegram (nếu bật) — _telegram_send được định nghĩa
+    # phía dưới, nhưng Python resolve name khi call nên OK.
     try:
         _telegram_send(f"<b>{title}</b>\n{message}")
     except Exception as e:
         print(f"[notify->telegram] {e}")
-
-
-@app.route("/admin/notifications")
-@admin_required
-def admin_notifications():
-    """Trả 20 thông báo mới nhất (JSON) cho chuông trên topbar."""
-    u = current_user()
-    items = list(db["notifications"].find().sort("created_at", -1).limit(20))
-    unread = 0
-    for it in items:
-        it["_id"] = str(it.get("_id"))
-        it["created_at"] = it["created_at"].isoformat() if it.get("created_at") else ""
-        it["is_read"] = u["_id"] in (it.get("read_by") or [])
-        if not it["is_read"]:
-            unread += 1
-    return jsonify({"items": items, "unread": unread})
-
-
-@app.route("/admin/notifications/mark_read", methods=["POST"])
-@admin_required
-def admin_notifications_mark_read():
-    u = current_user()
-    db["notifications"].update_many(
-        {"read_by": {"$ne": u["_id"]}},
-        {"$push": {"read_by": u["_id"]}},
-    )
-    return jsonify({"ok": True})
 
 
 # ══════════════════════════════════════════════════════════════
@@ -2903,6 +2855,58 @@ def admin_slides():
 
 
 # ══════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════
+#  Các route SSE / notifications — đặt cuối vì cần admin_required
+# ══════════════════════════════════════════════════════════════
+@app.route("/admin/stream")
+@admin_required
+def admin_stream():
+    """Server-Sent Events endpoint — admin mở trang giữ kết nối, nhận push realtime."""
+    def gen():
+        q = _hub.subscribe()
+        try:
+            yield f"event: hello\ndata: {json.dumps({'subs': _hub.n_subs()})}\n\n"
+            while True:
+                try:
+                    msg = q.get(timeout=25)
+                    yield f"event: notify\ndata: {msg}\n\n"
+                except queue.Empty:
+                    yield ": ping\n\n"
+        finally:
+            _hub.unsubscribe(q)
+    resp = Response(stream_with_context(gen()), mimetype="text/event-stream")
+    resp.headers["Cache-Control"] = "no-cache"
+    resp.headers["X-Accel-Buffering"] = "no"
+    return resp
+
+
+@app.route("/admin/notifications")
+@admin_required
+def admin_notifications():
+    """Trả 20 thông báo mới nhất (JSON) cho chuông trên topbar."""
+    u = current_user()
+    items = list(db["notifications"].find().sort("created_at", -1).limit(20))
+    unread = 0
+    for it in items:
+        it["_id"] = str(it.get("_id"))
+        it["created_at"] = it["created_at"].isoformat() if it.get("created_at") else ""
+        it["is_read"] = u["_id"] in (it.get("read_by") or [])
+        if not it["is_read"]:
+            unread += 1
+    return jsonify({"items": items, "unread": unread})
+
+
+@app.route("/admin/notifications/mark_read", methods=["POST"])
+@admin_required
+def admin_notifications_mark_read():
+    u = current_user()
+    db["notifications"].update_many(
+        {"read_by": {"$ne": u["_id"]}},
+        {"$push": {"read_by": u["_id"]}},
+    )
+    return jsonify({"ok": True})
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     from waitress import serve
