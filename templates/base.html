@@ -73,10 +73,26 @@
         body.dark-mode .text-muted { color:#9ca3af !important; }
         body.dark-mode .price-box { background:#0f172a; }
         body.dark-mode .iq-footer, body.dark-mode .mobile-bottom-bar { background:#1f2937; border-color:#374151; }
+        #pageLoader{
+            position:fixed; inset:0; z-index:99999; background:#fff;
+            display:flex; align-items:center; justify-content:center; transition:opacity .3s ease;
+        }
+        .floating-heart{
+            position:fixed; bottom:-30px; font-size:1.3rem; color:#ff6b6b;
+            opacity:.85; pointer-events:none; z-index:9997; animation:floatUpHeart linear forwards;
+        }
+        @keyframes floatUpHeart{
+            0%   { transform:translateY(0) translateX(0) rotate(0deg); opacity:.85; }
+            100% { transform:translateY(-110vh) translateX(var(--drift, 20px)) rotate(20deg); opacity:0; }
+        }
     </style>
     {% block extra_head %}{% endblock %}
 </head>
 <body>
+
+<div id="pageLoader">
+    <img src="{{ url_for('static', filename='images/gif_loaderRP3.gif') }}" alt="Đang tải..." style="width:72px;">
+</div>
 
 <div class="wrapper">
     <!-- ============ SIDEBAR ============ -->
@@ -373,6 +389,47 @@
         <div class="small font-weight-bold">Đơn hàng</div>
     </a>
 </div>
+
+<script>
+    (function () {
+        var l = document.getElementById('pageLoader');
+        if (!l) return;
+        window.addEventListener('load', function () {
+            var elapsed = performance.now();
+            var wait = Math.max(0, 450 - elapsed);
+            setTimeout(function () {
+                l.style.opacity = '0';
+                setTimeout(function () { l.style.display = 'none'; }, 300);
+            }, wait);
+        });
+        function showLoader() { l.style.display = 'flex'; l.style.opacity = '1'; }
+        document.addEventListener('click', function (e) {
+            var a = e.target.closest('a[href]');
+            if (!a || a.target === '_blank' || a.hasAttribute('download')) return;
+            var href = a.getAttribute('href');
+            if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+            try {
+                if (new URL(a.href, window.location.href).origin !== window.location.origin) return;
+            } catch (err) { return; }
+            showLoader();
+        });
+        document.addEventListener('submit', function () { showLoader(); });
+    })();
+
+    (function () {
+        function spawnHeart() {
+            var h = document.createElement('div');
+            h.className = 'floating-heart';
+            h.textContent = '❤';
+            h.style.left = (Math.random() * 100) + 'vw';
+            h.style.setProperty('--drift', (Math.random() * 60 - 30) + 'px');
+            h.style.animationDuration = (6 + Math.random() * 4) + 's';
+            document.body.appendChild(h);
+            setTimeout(function () { h.remove(); }, 10500);
+        }
+        setInterval(spawnHeart, 900);
+    })();
+</script>
 
 </body>
 </html>
