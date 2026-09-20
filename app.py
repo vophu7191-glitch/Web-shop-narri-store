@@ -289,6 +289,12 @@ def get_config():
             "seo_keywords": "",
             "purchase_limit_per_user": 0,      # B: 0 = không giới hạn
             "purchase_limit_per_day": 0,       # B: giới hạn số đơn/1 khách/1 ngày
+            # Nạp thẻ cào qua gachthefast
+            "gachthefast_domain": "gachthefast.com",
+            "gachthefast_partner_id": "",
+            "gachthefast_secret_key": "",
+            "gachthefast_enabled": False,
+            "background_music_url": "",         # để trống -> không hiện nút nhạc
         }
         col_config.insert_one(cfg)
     else:
@@ -305,6 +311,11 @@ def get_config():
             "captcha_enabled": True, "reviews_enabled": True,
             "seo_description": "", "seo_keywords": "",
             "purchase_limit_per_user": 0, "purchase_limit_per_day": 0,
+            "gachthefast_domain": "gachthefast.com",
+            "gachthefast_partner_id": "",
+            "gachthefast_secret_key": "",
+            "gachthefast_enabled": False,
+            "background_music_url": "",
         }
         changed = False
         for k, v in defaults.items():
@@ -447,11 +458,13 @@ def inject_globals():
     brands_full = get_brands()
     brands = {k: b["label"] for k, b in brands_full.items()}
     brand_icons = {k: b.get("icon", "fas fa-mobile-alt") for k, b in brands_full.items()}
+    brand_icon_images = {k: b.get("icon_image_url", "") for k, b in brands_full.items()}
     return {
         "current_user": current_user(),
         "cfg": get_config(),
         "brands": brands,
         "brand_icons": brand_icons,
+        "brand_icon_images": brand_icon_images,
         "brand_counts": {b: col_products.count_documents({"brand": b, "enabled": True}) for b in brands},
         "csrf_token": _get_csrf_token,
     }
@@ -545,6 +558,23 @@ def get_recent_activity(limit=15):
     return recent_orders, recent_recharges
 
 
+def get_top_buyers(limit=10, days=30):
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    agg = list(col_orders.aggregate([
+        {"$match": {"created_at": {"$gte": since}, "status": {"$ne": "cancelled"}}},
+        {"$group": {"_id": "$user_id", "total": {"$sum": "$price"}, "orders": {"$sum": 1}}},
+        {"$sort": {"total": -1}},
+        {"$limit": limit},
+    ]))
+    users_map = {u["_id"]: u["username"]
+                 for u in col_users.find({"_id": {"$in": [a["_id"] for a in agg]}}, {"username": 1})}
+    return [{
+        "user": mask_id(users_map.get(a["_id"], a["_id"])),
+        "total": a["total"],
+        "orders": a["orders"],
+    } for a in agg]
+
+
 # ══════════════════════════════════════════════════════════════
 #  TRANG CHỦ — danh sách sản phẩm theo từng brand (bật)
 # ══════════════════════════════════════════════════════════════
@@ -570,13 +600,15 @@ def home():
     slides.sort(key=lambda s: s.get("order", 999))
 
     recent_orders, recent_recharges = get_recent_activity()
+    top_buyers = get_top_buyers()
     return render_template("home.html",
                             products_by_brand=products_by_brand,
                             brands_full=brands_full,
                             pinned_products=pinned_products,
                             slides=slides,
                             recent_orders=recent_orders,
-                            recent_recharges=recent_recharges)
+                            recent_recharges=recent_recharges,
+                            top_buyers=top_buyers)
 
 
 @app.route("/api/activity")
@@ -959,8 +991,142 @@ def sepay_webhook():
 
 
 # ══════════════════════════════════════════════════════════════
-#  MUA HÀNG — trừ ví, xuất 1 code từ kho
+#  NẠP THẺ CÀO QUA GACHTHEFAST — endpoint: {domain}/chargingws/v2
+#  sign = md5(partner_key + code + serial)  — đã xác nhận theo tài liệu chính thức.
+#  ⚠️ callback_sign (chữ ký gachthefast gửi kèm khi họ gọi ngược về /charge/callback)
+#  thì CHƯA có công thức — hàm callback bên dưới tạm chỉ đối chiếu request_id,
+#  chưa kiểm tra callback_sign. Nếu có tài liệu phần này thì bổ sung sau.
 # ══════════════════════════════════════════════════════════════
+col_card_topups = db["card_topups"]
+col_card_topups.create_index([("created_at", -1)])
+col_card_topups.create_index("request_id", unique=True)
+
+
+def gachthefast_sign(cfg, code, serial):
+    """Theo tài liệu chính thức: sign = md5(partner_key + code + serial)."""
+    secret = cfg.get("gachthefast_secret_key", "")
+    raw = secret + str(code) + str(serial)
+    return hashlib.md5(raw.encode("utf-8")).hexdigest()
+
+
+def _gachthefast_call(cfg, params):
+    import urllib.request, urllib.parse
+    domain = (cfg.get("gachthefast_domain", "") or "gachthefast.com").strip()
+    if not domain.startswith("http"):
+        domain = "http://" + domain
+    url = f"{domain}/chargingws/v2"
+    data = urllib.parse.urlencode(params).encode("utf-8")
+    try:
+        req = urllib.request.Request(url, data=data, method="POST")
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        print(f"[gachthefast] call err: {e}")
+        return None
+
+
+@app.route("/wallet/charge-card", methods=["POST"])
+@login_required
+@csrf_protect
+def charge_card():
+    u = current_user()
+    cfg = get_config()
+    if not cfg.get("gachthefast_enabled") or not cfg.get("gachthefast_partner_id"):
+        flash("Nạp thẻ cào hiện chưa được bật. Vui lòng chọn cách nạp khác.", "error")
+        return redirect(url_for("wallet"))
+
+    telco  = (request.form.get("telco") or "").strip().upper()
+    code   = (request.form.get("code") or "").strip()
+    serial = (request.form.get("serial") or "").strip()
+    try:
+        amount = int(request.form.get("amount", "0"))
+    except ValueError:
+        amount = 0
+
+    if telco not in {"VIETTEL", "VINAPHONE", "MOBIFONE", "GATE", "ZING"} or not code or not serial or amount <= 0:
+        flash("Vui lòng nhập đầy đủ và đúng thông tin thẻ.", "error")
+        return redirect(url_for("wallet"))
+
+    request_id = uuid.uuid4().hex[:16]
+    sign = gachthefast_sign(cfg, code, serial)
+
+    params = {
+        "telco": telco, "code": code, "serial": serial, "amount": str(amount),
+        "request_id": request_id, "partner_id": cfg.get("gachthefast_partner_id", ""),
+        "sign": sign, "command": "charging",
+    }
+    result = _gachthefast_call(cfg, params)
+
+    col_card_topups.insert_one({
+        "_id": uuid.uuid4().hex[:12],
+        "user_id": u["_id"], "username": u["username"],
+        "telco": telco, "code": code, "serial": serial,
+        "declared_value": amount, "value": None, "credited_amount": None,
+        "request_id": request_id, "trans_id": (result or {}).get("trans_id"),
+        "status": "pending", "created_at": datetime.now(timezone.utc),
+    })
+    log_activity(u["_id"], u["username"], f"Gửi thẻ cào {telco} mệnh giá {amount:,}đ")
+
+    if result is None:
+        flash("Không kết nối được tới gachthefast, vui lòng thử lại sau.", "error")
+    else:
+        flash("Đã gửi thẻ, hệ thống đang xử lý — kết quả sẽ tự động cộng vào ví trong giây lát.", "success")
+    return redirect(url_for("wallet"))
+
+
+@app.route("/charge/callback", methods=["GET", "POST"])
+def gachthefast_callback():
+    """gachthefast gọi ngược route này khi xử lý xong thẻ (không có session -> không qua csrf_protect)."""
+    data = request.get_json(silent=True) or request.args.to_dict() or {}
+    request_id = str(data.get("request_id", ""))
+    topup = col_card_topups.find_one({"request_id": request_id})
+    if not topup:
+        return jsonify({"status": "ignored"}), 200
+    if topup["status"] != "pending":
+        return jsonify({"status": "already_processed"}), 200
+
+    status        = str(data.get("status", ""))
+    amount_credit = int(data.get("amount", 0) or 0)   # số tiền THỰC NHẬN (đã trừ phí gachthefast)
+    real_value    = data.get("value")
+
+    if status == "99":
+        # Thẻ chờ xử lý — chưa có kết quả cuối, giữ nguyên trạng thái pending, đợi callback tiếp theo
+        return jsonify({"status": "pending"}), 200
+
+    if status in ("1", "2") and amount_credit > 0:
+        # 1 = đúng mệnh giá, 2 = sai mệnh giá nhưng thẻ vẫn được chấp nhận (cộng đúng số tiền thực nhận)
+        col_card_topups.update_one({"_id": topup["_id"]}, {"$set": {
+            "status": "success", "value": real_value, "credited_amount": amount_credit,
+            "trans_id": data.get("trans_id"), "updated_at": datetime.now(timezone.utc),
+        }})
+        col_users.update_one({"_id": topup["user_id"]}, {"$inc": {"balance": amount_credit}})
+        col_recharges.insert_one({
+            "_id": uuid.uuid4().hex[:12],
+            "user_id": topup["user_id"], "username": topup["username"],
+            "amount": amount_credit, "bank": f"Thẻ cào {topup['telco']}",
+            "source": "gachthefast", "created_at": datetime.now(timezone.utc),
+        })
+        note = "đúng mệnh giá" if status == "1" else "SAI mệnh giá, cộng theo số tiền thực nhận"
+        log_activity(topup["user_id"], topup["username"],
+                     f"Nạp thẻ cào {topup['telco']} thành công ({note}) +{amount_credit:,}đ")
+        cfg = get_config()
+        if cfg.get("referral_on_recharge"):
+            _award_referral_commission(topup["user_id"], amount_credit, f"nạp thẻ {topup['telco']}")
+        notify_admins(
+            kind="recharge", title="💳 Nạp thẻ cào thành công",
+            message=f"{topup['username']} nạp thẻ {topup['telco']} +{amount_credit:,}đ" + ("" if status == "1" else " (sai mệnh giá)"),
+            url=url_for("admin_recharges"), meta={"user_id": topup["user_id"], "amount": amount_credit},
+        )
+    else:
+        # 3 = thẻ lỗi, 4 = hệ thống bảo trì, 100 = gửi thẻ thất bại
+        col_card_topups.update_one({"_id": topup["_id"]}, {"$set": {
+            "status": "failed", "value": real_value, "gachthefast_status": status,
+            "updated_at": datetime.now(timezone.utc),
+        }})
+        log_activity(topup["user_id"], topup["username"],
+                     f"Nạp thẻ cào {topup['telco']} thất bại (mã {status}): {data.get('message','')}")
+
+    return jsonify({"status": "ok"}), 200
 @app.route("/buy/<product_id>", methods=["POST"])
 @login_required
 @csrf_protect
@@ -1713,7 +1879,7 @@ def admin_brands():
         if action == "add":
             key   = request.form.get("key", "").strip().lower()
             label = request.form.get("label", "").strip()
-            icon  = request.form.get("icon", "").strip() or "fas fa-mobile-alt"
+            icon  = request.form.get("icon", "").strip()
             order = request.form.get("order", "99")
             try:
                 order = int(order)
@@ -1721,6 +1887,10 @@ def admin_brands():
                 order = 99
             cover_url = resolve_image_field(
                 form_url_key="cover_url", file_field_key="cover_file",
+                subdir="brands", old_value="",
+            )
+            icon_image_url = resolve_image_field(
+                form_url_key="icon_image_url", file_field_key="icon_image_file",
                 subdir="brands", old_value="",
             )
             if not re.fullmatch(r"[a-z0-9_]{2,20}", key):
@@ -1731,8 +1901,8 @@ def admin_brands():
                 flash("Mã brand đã tồn tại.", "error")
             else:
                 col_brands.insert_one({
-                    "_id": key, "label": label, "icon": icon,
-                    "cover_url": cover_url,
+                    "_id": key, "label": label, "icon": icon or "fas fa-mobile-alt",
+                    "cover_url": cover_url, "icon_image_url": icon_image_url,
                     "order": order, "enabled": True,
                     "created_at": datetime.now(timezone.utc),
                 })
@@ -1755,7 +1925,7 @@ def admin_edit_brand(key):
         flash("Brand không tồn tại.", "error")
         return redirect(url_for("admin_brands"))
     label = request.form.get("label", "").strip()
-    icon  = request.form.get("icon", "").strip() or "fas fa-mobile-alt"
+    icon  = request.form.get("icon", "").strip()
     order = request.form.get("order", "99")
     try:
         order = int(order)
@@ -1765,11 +1935,19 @@ def admin_edit_brand(key):
         form_url_key="cover_url", file_field_key="cover_file",
         subdir="brands", old_value=b.get("cover_url", ""),
     )
+    if request.form.get("remove_icon_image") == "1":
+        icon_image_url = ""
+    else:
+        icon_image_url = resolve_image_field(
+            form_url_key="icon_image_url", file_field_key="icon_image_file",
+            subdir="brands", old_value=b.get("icon_image_url", ""),
+        )
     if not label:
         flash("Tên hiển thị bắt buộc.", "error")
     else:
         col_brands.update_one({"_id": key}, {"$set": {
-            "label": label, "icon": icon, "order": order, "cover_url": cover_url,
+            "label": label, "icon": icon or "fas fa-mobile-alt",
+            "order": order, "cover_url": cover_url, "icon_image_url": icon_image_url,
         }})
         log_admin(f"Sửa brand '{label}' (key={key})")
         flash("Đã cập nhật brand.", "success")
@@ -2413,14 +2591,21 @@ def admin_settings():
             "seo_keywords":        request.form.get("seo_keywords", "").strip()[:200],
             "purchase_limit_per_user": max(0, int(request.form.get("purchase_limit_per_user","0") or 0)),
             "purchase_limit_per_day":  max(0, int(request.form.get("purchase_limit_per_day","0") or 0)),
+            "gachthefast_enabled":     request.form.get("gachthefast_enabled") == "1",
+            "gachthefast_domain":      request.form.get("gachthefast_domain", "gachthefast.com").strip(),
+            "gachthefast_partner_id":  request.form.get("gachthefast_partner_id", "").strip(),
+            "gachthefast_secret_key":  request.form.get("gachthefast_secret_key", "").strip(),
+            "background_music_url":    request.form.get("background_music_url", "").strip(),
         }}, upsert=True)
         log_admin("Cập nhật cấu hình hệ thống")
         flash("Đã lưu cấu hình.", "success")
         return redirect(url_for("admin_settings"))
     webhook_url = request.host_url.rstrip("/") + "/sepay-webhook"
+    gachthefast_callback_url = request.host_url.rstrip("/") + "/charge/callback"
     api_base = request.host_url.rstrip("/") + "/api/v1"
     return render_template("admin_settings.html",
                            cfg=get_config(), webhook_url=webhook_url, api_base=api_base,
+                           gachthefast_callback_url=gachthefast_callback_url,
                            has_pyotp=_HAS_PYOTP, has_qrcode=_HAS_QRCODE)
 
 
