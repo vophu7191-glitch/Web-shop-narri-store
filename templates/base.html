@@ -47,6 +47,7 @@
         .product-card:hover { box-shadow:0 6px 18px rgba(12,37,86,.1); transform:translateY(-2px); }
         .info-field label { display:block; font-size:.78rem; color:#8a94a6; margin-bottom:4px; font-weight:600; text-transform:uppercase; letter-spacing:.02em; }
         .info-field .info-value { background:#f4f6fa; border:1px solid #e7eaf3; border-radius:8px; padding:9px 12px; color:#324253; word-break:break-word; }
+        .data-scrollbar{ overflow-y:auto !important; -webkit-overflow-scrolling:touch; }
         .mobile-bottom-bar {
             display:none; position:fixed; left:0; right:0; bottom:0; z-index:998;
             background:#fff; border-top:1px solid #e7eaf3; padding:8px 18px;
@@ -84,6 +85,24 @@
         @keyframes floatUpHeart{
             0%   { transform:translateY(0) translateX(0) rotate(0deg); opacity:.85; }
             100% { transform:translateY(-110vh) translateX(var(--drift, 20px)) rotate(20deg); opacity:0; }
+        }
+        #activityToast{
+            position:fixed; left:16px; bottom:16px; z-index:9996;
+            background:#fff; border-left:4px solid #2D11FE; border-radius:10px;
+            box-shadow:0 6px 20px rgba(12,37,86,.18); padding:10px 16px;
+            font-size:.85rem; max-width:280px; transform:translateY(20px); opacity:0;
+            transition:transform .35s ease, opacity .35s ease; pointer-events:none;
+        }
+        #activityToast.show{ transform:translateY(0); opacity:1; }
+        body.dark-mode #activityToast{ background:#1f2937; color:#e5e7eb; }
+        #musicToggle{
+            position:fixed; right:16px; bottom:16px; z-index:9996;
+            width:46px; height:46px; border-radius:50%; background:#2D11FE; color:#fff;
+            display:flex; align-items:center; justify-content:center; font-size:1.1rem;
+            box-shadow:0 4px 14px rgba(12,37,86,.25); cursor:pointer; border:none;
+        }
+        @media (max-width:991px){
+            #activityToast, #musicToggle{ bottom:78px; }
         }
     </style>
     {% block extra_head %}{% endblock %}
@@ -144,7 +163,11 @@
                             {% for key, label in brands.items() %}
                             <li class="sidebar-layout">
                                 <a href="{{ url_for('home') }}#brand-{{ key }}" class="svg-icon brand-link" data-brand="{{ key }}">
-                                    <i class="{{ brand_icons.get(key, 'fas fa-mobile-alt') }}"></i>
+                                    {% if brand_icon_images.get(key) %}
+                                        <img src="{{ brand_icon_images.get(key) }}" alt="" style="width:16px;height:16px;object-fit:cover;border-radius:3px;">
+                                    {% else %}
+                                        <i class="{{ brand_icons.get(key, 'fas fa-mobile-alt') }}"></i>
+                                    {% endif %}
                                     <span class="ml-2">{{ label }}</span>
                                     <span class="badge badge-light ml-1">{{ brand_counts.get(key, 0) }}</span>
                                 </a>
@@ -390,6 +413,15 @@
     </a>
 </div>
 
+<div id="activityToast"></div>
+
+{% if cfg.background_music_url %}
+<audio id="bgMusic" loop preload="none">
+    <source src="{{ cfg.background_music_url }}">
+</audio>
+<button id="musicToggle" type="button" title="Nhạc nền"><i class="fas fa-music"></i></button>
+{% endif %}
+
 <script>
     (function () {
         var l = document.getElementById('pageLoader');
@@ -428,6 +460,51 @@
             setTimeout(function () { h.remove(); }, 10500);
         }
         setInterval(spawnHeart, 900);
+    })();
+
+    (function () {
+        var toast = document.getElementById('activityToast');
+        if (!toast) return;
+        var queue = [];
+        var showing = false;
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, function (c) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+            });
+        }
+        function showNext() {
+            if (showing || !queue.length) return;
+            showing = true;
+            var o = queue.shift();
+            toast.innerHTML = '🎉 <b style="color:#2D11FE;">' + escapeHtml(o.user) + '</b> vừa mua <b>' + escapeHtml(o.product) + '</b>';
+            toast.classList.add('show');
+            setTimeout(function () {
+                toast.classList.remove('show');
+                setTimeout(function () { showing = false; }, 400);
+            }, 4200);
+        }
+        function refill() {
+            fetch('{{ url_for("api_activity") }}')
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data.orders && data.orders.length) queue = data.orders.slice(0, 6);
+                })
+                .catch(function () {});
+        }
+        refill();
+        setInterval(refill, 60000);
+        setInterval(showNext, 6000);
+    })();
+
+    (function () {
+        var btn = document.getElementById('musicToggle');
+        var audio = document.getElementById('bgMusic');
+        if (!btn || !audio) return;
+        btn.addEventListener('click', function () {
+            if (audio.paused) { audio.play().catch(function () {}); btn.classList.add('text-warning'); }
+            else { audio.pause(); btn.classList.remove('text-warning'); }
+        });
     })();
 </script>
 

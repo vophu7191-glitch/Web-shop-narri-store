@@ -84,7 +84,11 @@
             {% for key, label in brands.items() %}
             <li class="nav-item">
                 <a class="nav-link brand-pill {% if loop.first %}active{% endif %}" href="#brand-{{ key }}" data-brand="{{ key }}">
-                    <i class="{{ brand_icons.get(key, 'fas fa-mobile-alt') }} mr-1"></i>{{ label }}
+                    {% if brand_icon_images.get(key) %}
+                        <img src="{{ brand_icon_images.get(key) }}" alt="" style="width:16px;height:16px;object-fit:cover;border-radius:3px;" class="mr-1">
+                    {% else %}
+                        <i class="{{ brand_icons.get(key, 'fas fa-mobile-alt') }} mr-1"></i>
+                    {% endif %}{{ label }}
                 </a>
             </li>
             {% endfor %}
@@ -175,6 +179,37 @@
         {% if current_user %}
         <a href="{{ url_for('orders') }}" class="btn btn-secondary btn-sm"><i class="fas fa-cart-arrow-down mr-1"></i>Lịch Sử Mua Hàng</a>
         {% endif %}
+    </div>
+</div>
+
+<!-- Bảng xếp hạng mua hàng -->
+<div class="row mt-3">
+    <div class="col-12">
+        <div class="card card-block card-stretch card-height">
+            <div class="card-header d-flex justify-content-between" style="background:#f0ad4e;">
+                <div class="header-title"><h5 class="card-title" style="color:white;">🏆 TOP MUA HÀNG (30 NGÀY)</h5></div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-striped mb-0">
+                        <tbody>
+                            {% for t in top_buyers %}
+                            <tr>
+                                <td style="width:40px;font-weight:700;">
+                                    {% if loop.index == 1 %}🥇{% elif loop.index == 2 %}🥈{% elif loop.index == 3 %}🥉{% else %}#{{ loop.index }}{% endif %}
+                                </td>
+                                <td><b style="color:green;">{{ t.user }}</b></td>
+                                <td class="text-muted">{{ t.orders }} đơn</td>
+                                <td class="text-right"><b style="color:#f0ad4e;">{{ "{:,}".format(t.total) }}đ</b></td>
+                            </tr>
+                            {% else %}
+                            <tr><td class="text-center text-muted py-4">Chưa có dữ liệu.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 

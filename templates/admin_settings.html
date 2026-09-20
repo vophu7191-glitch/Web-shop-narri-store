@@ -79,6 +79,12 @@
             </div>
         </div>
 
+        <div class="form-group">
+            <label>🎵 Link nhạc nền (mp3, để trống = không hiện nút nhạc)</label>
+            <input type="text" name="background_music_url" class="form-control" value="{{ cfg.get('background_music_url','') }}" placeholder="https://.../nhac.mp3">
+            <p class="text-muted small mb-0">Chỉ nên dùng nhạc không bản quyền/đã có giấy phép. Nút bật nhạc hiện ở góc dưới bên phải, khách tự bấm phát.</p>
+        </div>
+
         <hr>
         <h6>🏦 Ngân hàng nhận tiền (dùng để tạo QR nạp ví)</h6>
         <div class="form-row">
@@ -103,6 +109,33 @@
             <input type="text" name="sepay_api_key" class="form-control" value="{{ cfg.sepay_api_key }}">
         </div>
         <p class="text-muted small">Webhook URL cần cấu hình bên SePay: <code>{{ webhook_url }}</code></p>
+
+        <hr>
+        <h6>💳 Nạp thẻ cào (gachthefast)</h6>
+        <div class="alert alert-warning small py-2">
+            ⚠️ Chữ ký gửi thẻ (sign) đã xác nhận đúng công thức. Riêng chữ ký gachthefast gửi kèm khi callback kết quả về (callback_sign) thì hệ thống chưa kiểm tra do chưa có tài liệu — nếu gachthefast cung cấp thêm, báo lại để bổ sung.
+        </div>
+        <div class="form-group">
+            <div class="custom-control custom-switch">
+                <input type="checkbox" class="custom-control-input" id="gachthefast_enabled" name="gachthefast_enabled" value="1" {% if cfg.gachthefast_enabled %}checked{% endif %}>
+                <label class="custom-control-label" for="gachthefast_enabled">Bật nạp thẻ cào</label>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="col-md-4 form-group">
+                <label>Domain gachthefast</label>
+                <input type="text" name="gachthefast_domain" class="form-control" value="{{ cfg.gachthefast_domain }}">
+            </div>
+            <div class="col-md-4 form-group">
+                <label>Partner ID</label>
+                <input type="text" name="gachthefast_partner_id" class="form-control" value="{{ cfg.gachthefast_partner_id }}">
+            </div>
+            <div class="col-md-4 form-group">
+                <label>Secret Key</label>
+                <input type="text" name="gachthefast_secret_key" class="form-control" value="{{ cfg.gachthefast_secret_key }}">
+            </div>
+        </div>
+        <p class="text-muted small">Callback URL cần khai báo bên gachthefast: <code>{{ gachthefast_callback_url }}</code></p>
 
         <hr>
         <h6>📦 Kho hàng &amp; giới hạn</h6>

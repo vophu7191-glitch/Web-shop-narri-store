@@ -38,6 +38,14 @@
             <label>… hoặc dán URL ảnh cover</label>
             <input type="text" name="cover_url" class="form-control" placeholder="https://...">
         </div>
+        <div class="col-md-6 form-group">
+            <label>Ảnh icon nhỏ (tuỳ chọn — nếu có sẽ thay cho icon chữ ở sidebar/tab)</label>
+            <input type="file" name="icon_image_file" accept="image/*" class="form-control-file">
+        </div>
+        <div class="col-md-6 form-group">
+            <label>… hoặc dán URL ảnh icon</label>
+            <input type="text" name="icon_image_url" class="form-control" placeholder="https://...">
+        </div>
     </form>
 </div>
 
@@ -52,7 +60,13 @@
                     <img src="{{ b.cover_url }}" alt="cover" style="width:110px;height:60px;object-fit:cover;border-radius:6px;">
                 {% else %}<span class="text-muted small">—</span>{% endif %}
             </td>
-            <td><i class="{{ b.get('icon','fas fa-mobile-alt') }} fa-lg"></i></td>
+            <td>
+                {% if b.get('icon_image_url') %}
+                    <img src="{{ b.icon_image_url }}" alt="icon" style="width:28px;height:28px;object-fit:cover;border-radius:5px;">
+                {% else %}
+                    <i class="{{ b.get('icon','fas fa-mobile-alt') }} fa-lg"></i>
+                {% endif %}
+            </td>
             <td><code>{{ b._id }}</code></td>
             <td>{{ b.label }}</td>
             <td>{{ b.order }}</td>
@@ -63,12 +77,22 @@
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="form-inline mb-1">
                         <input type="text" name="label" value="{{ b.label }}" class="form-control form-control-sm mr-1" style="width:130px" required>
-                        <input type="text" name="icon"  value="{{ b.get('icon','fas fa-mobile-alt') }}" class="form-control form-control-sm mr-1" style="width:170px">
+                        <input type="text" name="icon"  value="{{ b.get('icon','fas fa-mobile-alt') }}" class="form-control form-control-sm mr-1" style="width:150px" placeholder="fas fa-mobile-alt">
                         <input type="number" name="order" value="{{ b.order }}" class="form-control form-control-sm mr-1" style="width:70px">
                     </div>
+                    <div class="form-inline mb-1">
+                        <input type="file" name="cover_file" accept="image/*" class="form-control-file form-control-sm mr-1" style="max-width:150px">
+                        <input type="text" name="cover_url" value="{{ b.get('cover_url','') }}" placeholder="URL cover" class="form-control form-control-sm mr-1" style="width:150px">
+                    </div>
                     <div class="form-inline">
-                        <input type="file" name="cover_file" accept="image/*" class="form-control-file form-control-sm mr-1" style="max-width:180px">
-                        <input type="text" name="cover_url" value="{{ b.get('cover_url','') }}" placeholder="hoặc URL cover" class="form-control form-control-sm mr-1" style="width:180px">
+                        <input type="file" name="icon_image_file" accept="image/*" class="form-control-file form-control-sm mr-1" style="max-width:150px" title="Ảnh icon nhỏ">
+                        <input type="text" name="icon_image_url" value="" placeholder="URL ảnh icon" class="form-control form-control-sm mr-1" style="width:150px">
+                        {% if b.get('icon_image_url') %}
+                        <div class="custom-control custom-checkbox mr-2">
+                            <input type="checkbox" class="custom-control-input" id="rmicon_{{ b._id }}" name="remove_icon_image" value="1">
+                            <label class="custom-control-label small" for="rmicon_{{ b._id }}">Xoá ảnh icon</label>
+                        </div>
+                        {% endif %}
                         <button class="btn btn-sm btn-outline-primary">💾 Lưu</button>
                     </div>
                 </form>

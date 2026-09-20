@@ -35,8 +35,47 @@
     </div>
 </div>
 
+{% if cfg.gachthefast_enabled %}
 <div class="card p-4 mb-4">
-    <h5 class="mb-3">🔒 Đổi mật khẩu</h5>
+    <h5 class="mb-3">💳 Nạp bằng thẻ cào</h5>
+    <form method="post" action="{{ url_for('charge_card') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-row">
+            <div class="col-md-3 form-group">
+                <label class="small text-muted">Nhà mạng</label>
+                <select name="telco" class="form-control" required>
+                    <option value="VIETTEL">Viettel</option>
+                    <option value="VINAPHONE">Vinaphone</option>
+                    <option value="MOBIFONE">Mobifone</option>
+                    <option value="GATE">Gate</option>
+                    <option value="ZING">Zing</option>
+                </select>
+            </div>
+            <div class="col-md-3 form-group">
+                <label class="small text-muted">Mệnh giá</label>
+                <select name="amount" class="form-control" required>
+                    <option value="10000">10.000đ</option>
+                    <option value="20000">20.000đ</option>
+                    <option value="50000">50.000đ</option>
+                    <option value="100000">100.000đ</option>
+                    <option value="200000">200.000đ</option>
+                    <option value="500000">500.000đ</option>
+                </select>
+            </div>
+            <div class="col-md-3 form-group">
+                <label class="small text-muted">Số serial</label>
+                <input type="text" name="serial" class="form-control" required>
+            </div>
+            <div class="col-md-3 form-group">
+                <label class="small text-muted">Mã thẻ</label>
+                <input type="text" name="code" class="form-control" required>
+            </div>
+        </div>
+        <button class="btn btn-primary">Nạp thẻ</button>
+        <p class="text-muted small mt-2 mb-0">Thẻ sẽ được kiểm tra tự động, kết quả cộng vào ví sau ít phút. Nhập sai mệnh giá có thể bị trừ % theo quy định của nhà mạng.</p>
+    </form>
+</div>
+{% endif %}
     <form method="post" action="{{ url_for('change_password') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="row">
