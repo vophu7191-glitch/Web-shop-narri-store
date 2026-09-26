@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Điều khoản sử dụng{% endblock %}
+{% block content %}
+
+<div class="card p-4" style="max-width:820px;margin:0 auto;">
+    <h4 class="mb-4">📜 Điều khoản sử dụng</h4>
+    <p class="text-muted">Bằng việc tạo tài khoản và sử dụng {{ cfg.site_name or "CloudShop" }}, bạn đồng ý với các điều khoản dưới đây.</p>
+
+    <h6 class="mt-4">1. Tài khoản và ví</h6>
+    <ul>
+        <li>Bạn chịu trách nhiệm bảo mật tên đăng nhập và mật khẩu của mình.</li>
+        <li>Số dư trong ví chỉ được dùng để mua sản phẩm/dịch vụ trên hệ thống, không thể quy đổi ngược lại thành tiền mặt trừ trường hợp đơn hàng bị huỷ (được hoàn lại vào ví).</li>
+        <li>Vui lòng kiểm tra kỹ nội dung chuyển khoản khi nạp tiền — hệ thống chỉ tự động cộng tiền khi nội dung khớp đúng.</li>
+    </ul>
+
+    <h6 class="mt-4">2. Đơn hàng và giao sản phẩm</h6>
+    <ul>
+        <li>Với sản phẩm giao ngay (tự động), code sẽ được cấp ngay sau khi thanh toán.</li>
+        <li>Với sản phẩm xử lý thủ công, đơn hàng sẽ ở trạng thái "Chờ xử lý" cho đến khi admin duyệt và giao thông tin — thời gian xử lý có thể mất một khoảng thời gian.</li>
+        <li>Nếu đơn không thể xử lý được, admin sẽ huỷ đơn và hoàn tiền đầy đủ vào ví của bạn.</li>
+        <li>Vì sản phẩm là hàng hoá số (code/tài khoản), sau khi đã giao thành công thì không hỗ trợ đổi trả trừ khi lỗi từ phía hệ thống.</li>
+    </ul>
+
+    <h6 class="mt-4">3. Mã giảm giá & giới thiệu bạn bè</h6>
+    <p>Mã giảm giá có điều kiện áp dụng riêng (hạn sử dụng, số lần dùng...) do admin thiết lập. Chương trình giới thiệu bạn bè (nếu có) chỉ ghi nhận cho tài khoản thật, không dùng cho mục đích gian lận/tạo tài khoản ảo.</p>
+
+    <h6 class="mt-4">4. Hành vi bị nghiêm cấm</h6>
+    <ul>
+        <li>Gian lận thanh toán, khai thác lỗi hệ thống, tấn công mạng.</li>
+        <li>Tạo nhiều tài khoản để trục lợi chương trình khuyến mãi/giới thiệu.</li>
+        <li>Có hành vi lăng mạ, đe doạ nhân viên hỗ trợ.</li>
+    </ul>
+    <p>Vi phạm các điều trên có thể dẫn đến tạm khoá hoặc xoá vĩnh viễn tài khoản.</p>
+
+    <h6 class="mt-4">5. Giới hạn trách nhiệm</h6>
+    <p>Chúng tôi không chịu trách nhiệm cho các thiệt hại phát sinh do khách hàng cung cấp sai thông tin, chia sẻ tài khoản cho người khác, hoặc các sự cố nằm ngoài khả năng kiểm soát của hệ thống (mất kết nối, lỗi từ đối tác thanh toán bên thứ ba...).</p>
+
+    <h6 class="mt-4">6. Thay đổi điều khoản</h6>
+    <p>Điều khoản có thể được cập nhật theo thời gian. Việc tiếp tục sử dụng dịch vụ sau khi có thay đổi đồng nghĩa bạn chấp nhận điều khoản mới nhất.</p>
+
+    <hr class="my-4">
+    <p class="text-muted small mb-0">Mọi thắc mắc, vui lòng liên hệ admin qua thông tin trong mục "Liên hệ" của website.</p>
+</div>
+
+{% endblock %}

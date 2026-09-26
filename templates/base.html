@@ -271,7 +271,10 @@
         <div class="container-fluid">
             <div class="row">
                 <div class="col-lg-6"><span class="text-muted small">© {{ cfg.site_name or "CloudShop" }} — Giao code tự động 24/7</span></div>
-                <div class="col-lg-6 text-right"><span class="text-muted small">RedFinger · UGPhone · VIPPlayer · GenPlay · VMOS</span></div>
+                <div class="col-lg-6 text-right">
+                    <a href="{{ url_for('privacy_policy') }}" class="text-muted small mr-2">Chính sách bảo mật</a>
+                    <a href="{{ url_for('terms') }}" class="text-muted small">Điều khoản sử dụng</a>
+                </div>
             </div>
         </div>
     </footer>

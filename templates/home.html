@@ -106,7 +106,13 @@
             {% if bcover %}
             <div class="brand-cover mb-3" style="background:url('{{ bcover }}') center/cover no-repeat;border-radius:12px;height:150px;position:relative;overflow:hidden;">
                 <div style="position:absolute;inset:0;background:linear-gradient(90deg, rgba(45,17,254,.75), rgba(45,17,254,.15));padding:20px 25px;display:flex;flex-direction:column;justify-content:center;">
-                    <h4 class="text-white mb-1" style="text-shadow:0 2px 8px rgba(0,0,0,.35);"><i class="{{ brand_icons.get(key,'fas fa-mobile-alt') }} mr-2"></i>{{ label }}</h4>
+                    <h4 class="text-white mb-1" style="text-shadow:0 2px 8px rgba(0,0,0,.35);">
+                        {% if brand_icon_images.get(key) %}
+                            <img src="{{ brand_icon_images.get(key) }}" alt="" style="width:34px;height:34px;object-fit:cover;border-radius:6px;vertical-align:middle;" class="mr-2">
+                        {% else %}
+                            <i class="{{ brand_icons.get(key,'fas fa-mobile-alt') }} mr-2"></i>
+                        {% endif %}{{ label }}
+                    </h4>
                     <div class="text-white small" style="opacity:.9;">{{ brand_counts.get(key,0) }} sản phẩm đang bán</div>
                 </div>
             </div>

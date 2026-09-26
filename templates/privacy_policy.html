@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Chính sách bảo mật{% endblock %}
+{% block content %}
+
+<div class="card p-4" style="max-width:820px;margin:0 auto;">
+    <h4 class="mb-4">🔒 Chính sách bảo mật</h4>
+
+    <p class="text-muted">{{ cfg.site_name or "CloudShop" }} cam kết bảo vệ thông tin cá nhân của khách hàng khi sử dụng dịch vụ.</p>
+
+    <h6 class="mt-4">1. Thông tin chúng tôi thu thập</h6>
+    <p>Khi bạn đăng ký tài khoản, chúng tôi lưu: tên đăng nhập, mật khẩu (đã mã hoá, không lưu dạng chữ thường), số dư ví, lịch sử đơn hàng và lịch sử nạp tiền. Chúng tôi cũng ghi lại địa chỉ IP khi đăng nhập/đăng ký để phục vụ mục đích bảo mật tài khoản.</p>
+
+    <h6 class="mt-4">2. Mục đích sử dụng thông tin</h6>
+    <ul>
+        <li>Xử lý đơn hàng, giao code/tài khoản cho khách sau khi thanh toán.</li>
+        <li>Xác minh giao dịch nạp tiền (qua chuyển khoản ngân hàng hoặc thẻ cào).</li>
+        <li>Hỗ trợ khách hàng khi có khiếu nại hoặc sự cố.</li>
+        <li>Phát hiện và ngăn chặn gian lận, lạm dụng hệ thống.</li>
+    </ul>
+
+    <h6 class="mt-4">3. Chia sẻ thông tin</h6>
+    <p>Chúng tôi không bán hoặc cho thuê thông tin cá nhân của bạn cho bên thứ ba. Thông tin chỉ được chia sẻ với các đối tác thanh toán (ngân hàng, cổng thanh toán, dịch vụ đổi thẻ) ở mức cần thiết để xử lý giao dịch, hoặc khi có yêu cầu từ cơ quan pháp luật.</p>
+
+    <h6 class="mt-4">4. Bảo vệ thông tin</h6>
+    <p>Mật khẩu được mã hoá một chiều trước khi lưu trữ. Hệ thống hỗ trợ xác thực 2 lớp (2FA) để tăng cường bảo mật tài khoản. Dù vậy, không có hệ thống trực tuyến nào an toàn tuyệt đối 100%; bạn nên tự bảo vệ mật khẩu và không chia sẻ tài khoản cho người khác.</p>
+
+    <h6 class="mt-4">5. Quyền của bạn</h6>
+    <p>Bạn có quyền yêu cầu chúng tôi cung cấp, chỉnh sửa hoặc xoá thông tin cá nhân của mình bằng cách liên hệ admin qua thông tin bên dưới.</p>
+
+    <h6 class="mt-4">6. Thay đổi chính sách</h6>
+    <p>Chính sách này có thể được cập nhật theo thời gian. Phiên bản mới nhất luôn được đăng công khai tại trang này.</p>
+
+    <hr class="my-4">
+    <p class="text-muted small mb-0">Mọi thắc mắc về chính sách bảo mật, vui lòng liên hệ admin qua thông tin trong mục "Liên hệ" của website.</p>
+</div>
+
+{% endblock %}
