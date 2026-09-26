@@ -2121,6 +2121,8 @@ def admin_order_update(order_id):
         return redirect(url_for("admin_orders"))
 
     if request.method == "POST":
+        buyer = col_users.find_one({"_id": o["user_id"]}, {"username": 1})
+        buyer_name = buyer["username"] if buyer else o["user_id"]
         new_status = request.form.get("status", o.get("status", "pending"))
         account_info = request.form.get("account_info", "").strip()
         account_password = request.form.get("account_password", "").strip()
@@ -2145,9 +2147,14 @@ def admin_order_update(order_id):
                 )
             log_admin(f"Huỷ đơn {order_id} & hoàn {o['price']:,}đ cho {o.get('user_id','?')}")
             flash(f"Đã huỷ đơn và hoàn {o['price']:,}đ vào ví khách.", "success")
+            log_activity(o["user_id"], buyer_name,
+                         f"Đơn hàng {o.get('product_name','')} bị huỷ, đã hoàn {o['price']:,}đ vào ví")
         else:
             log_admin(f"Cập nhật đơn {order_id} sang status={new_status}")
             flash("Đã cập nhật đơn hàng.", "success")
+            if new_status == "completed" and o.get("status") != "completed":
+                log_activity(o["user_id"], buyer_name,
+                             f"Đơn hàng {o.get('product_name','')} đã hoàn tất, vào trang Đơn hàng để xem")
 
         col_orders.update_one({"_id": order_id}, {"$set": update})
         return redirect(url_for("admin_orders"))
