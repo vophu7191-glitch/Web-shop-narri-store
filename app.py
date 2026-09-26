@@ -2481,6 +2481,19 @@ def admin_export_users():
 
 
 # ══════════════════════════════════════════════════════════════
+#  TRANG CHÍNH SÁCH / ĐIỀU KHOẢN (nội dung tĩnh, không cần đăng nhập)
+# ══════════════════════════════════════════════════════════════
+@app.route("/chinh-sach-bao-mat")
+def privacy_policy():
+    return render_template("privacy_policy.html")
+
+
+@app.route("/dieu-khoan-su-dung")
+def terms():
+    return render_template("terms.html")
+
+
+# ══════════════════════════════════════════════════════════════
 #  BÀI VIẾT (F): thêm/sửa/xoá
 # ══════════════════════════════════════════════════════════════
 @app.route("/tin-tuc")
