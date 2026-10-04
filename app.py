@@ -1010,16 +1010,31 @@ def gachthefast_sign(cfg, code, serial):
 
 
 def _gachthefast_call(cfg, params):
-    import urllib.request, urllib.parse
+    import urllib.request, urllib.parse, urllib.error
     domain = (cfg.get("gachthefast_domain", "") or "gachthefast.com").strip()
+    domain = domain.replace("http://", "https://")
     if not domain.startswith("http"):
-        domain = "http://" + domain
+        domain = "https://" + domain
     url = f"{domain}/chargingws/v2"
     data = urllib.parse.urlencode(params).encode("utf-8")
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+        "Accept": "application/json",
+    }
     try:
-        req = urllib.request.Request(url, data=data, method="POST")
+        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
         with urllib.request.urlopen(req, timeout=15) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+            raw = resp.read().decode("utf-8", errors="replace")
+            try:
+                return json.loads(raw)
+            except ValueError:
+                print(f"[gachthefast] non-JSON response (status {resp.status}): {raw[:300]}")
+                return None
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        print(f"[gachthefast] HTTP {e.code}: {body[:300]}")
+        return None
     except Exception as e:
         print(f"[gachthefast] call err: {e}")
         return None
