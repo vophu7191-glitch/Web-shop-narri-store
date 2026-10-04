@@ -137,6 +137,12 @@
         </div>
         <p class="text-muted small">Callback URL cần khai báo bên gachthefast: <code>{{ gachthefast_callback_url }}</code></p>
 
+        <div class="form-group">
+            <label>🔁 Link callback riêng của bot Discord (để web chuyển tiếp — chỉ cần nếu bot cũng dùng chung gachthefast)</label>
+            <input type="text" name="bot_callback_url" class="form-control" value="{{ cfg.get('bot_callback_url','') }}" placeholder="https://domain-bot-cua-ban.../callback">
+            <p class="text-muted small mb-0">Vì gachthefast chỉ cho 1 link callback cố định, web sẽ nhận hộ rồi tự chuyển tiếp những callback không phải đơn của web sang link này cho bot xử lý.</p>
+        </div>
+
         <hr>
         <h6>📦 Kho hàng &amp; giới hạn</h6>
         <div class="form-row">
