@@ -20,6 +20,7 @@ from flask import (
 from pymongo import MongoClient, ReturnDocument
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # 2FA (TOTP) + QR code — optional but recommended
 try:
@@ -41,6 +42,12 @@ MONGO_URI  = os.environ.get("MONGO_URI", "").strip()
 SECRET_KEY = os.environ.get("SECRET_KEY", "").strip() or secrets.token_hex(32)
 
 app = Flask(__name__)
+# Render (và các PaaS khác) chạy app sau proxy TLS: proxy nhận https rồi forward
+# http xuống app kèm header X-Forwarded-Proto. Không có ProxyFix thì Flask luôn
+# nghĩ request là http -> request.host_url sinh ra "http://..." -> gachthefast
+# gọi callback vào URL http -> bị Render redirect 307 sang https -> callback lỗi.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
+app.config["PREFERRED_URL_SCHEME"] = "https"
 app.config["SECRET_KEY"] = SECRET_KEY
 # Session cookie an toàn hơn 1 chút: HttpOnly + SameSite=Lax (Secure sẽ tự bật
 # ở proxy TLS như Render, không ép Secure ở đây để dev localhost vẫn dùng được).
@@ -1046,6 +1053,13 @@ def _gachthefast_call(cfg, params):
 def charge_card():
     u = current_user()
     cfg = get_config()
+    # Fallback cấu hình gachthefast từ biến môi trường (Render) nếu chưa lưu qua /admin/settings
+    if not cfg.get("gachthefast_partner_id"):
+        cfg["gachthefast_partner_id"] = os.environ.get("GACHTHEFAST_PARTNER_ID", "")
+    if not cfg.get("gachthefast_secret_key"):
+        cfg["gachthefast_secret_key"] = os.environ.get("GACHTHEFAST_SECRET_KEY", "")
+    if not cfg.get("gachthefast_enabled") and os.environ.get("GACHTHEFAST_PARTNER_ID"):
+        cfg["gachthefast_enabled"] = True
     if not cfg.get("gachthefast_enabled") or not cfg.get("gachthefast_partner_id"):
         flash("Nạp thẻ cào hiện chưa được bật. Vui lòng chọn cách nạp khác.", "error")
         return redirect(url_for("wallet"))
