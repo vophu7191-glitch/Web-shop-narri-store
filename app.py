@@ -49,6 +49,21 @@ app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 app.config["PREFERRED_URL_SCHEME"] = "https"
 app.config["SECRET_KEY"] = SECRET_KEY
+
+FORCE_HTTPS_URLS = os.environ.get("FORCE_HTTPS_URLS", "1").strip() != "0"
+
+
+def public_base_url():
+    """request.host_url nhưng luôn trả về https (trừ khi chạy local/dev hoặc
+    tắt bằng env FORCE_HTTPS_URLS=0). Một số domain custom qua thêm proxy/CDN
+    không truyền đúng X-Forwarded-Proto nên ProxyFix không đủ tin cậy — hàm
+    này ép cứng https để các URL đưa cho SePay/gachthefast luôn đúng."""
+    base = request.host_url.rstrip("/")
+    if FORCE_HTTPS_URLS and base.startswith("http://") and not (
+        request.host.startswith("127.0.0.1") or request.host.startswith("localhost")
+    ):
+        base = "https://" + base[len("http://"):]
+    return base
 # Session cookie an toàn hơn 1 chút: HttpOnly + SameSite=Lax (Secure sẽ tự bật
 # ở proxy TLS như Render, không ép Secure ở đây để dev localhost vẫn dùng được).
 app.config.update(
@@ -774,7 +789,7 @@ def wallet():
         total_deposited = agg[0]["total"]
 
     referral_count = col_users.count_documents({"referred_by": u["_id"]})
-    referral_link = request.host_url.rstrip("/") + url_for("register") + f"?ref={u['_id']}"
+    referral_link = public_base_url() + url_for("register") + f"?ref={u['_id']}"
 
     return render_template("wallet.html", u=u, qr_url=qr_url, total_deposited=total_deposited,
                             transfer_content=f"NAPU{u['_id']}", orders=orders,
@@ -1106,7 +1121,33 @@ def charge_card():
 @app.route("/charge/callback", methods=["GET", "POST"])
 def gachthefast_callback():
     """gachthefast gọi ngược route này khi xử lý xong thẻ (không có session -> không qua csrf_protect)."""
-    data = request.get_json(silent=True) or request.args.to_dict() or {}
+    try:
+        return _gachthefast_callback_impl()
+    except Exception:
+        import traceback
+        traceback.print_exc()  # in đầy đủ traceback ra Render logs để biết lỗi thật
+        return jsonify({"status": "error"}), 200  # trả 200 để gachthefast không retry loạn lên trong lúc debug
+
+
+def _safe_int(v):
+    """Ép kiểu int an toàn: chấp nhận cả số, chuỗi số, chuỗi số thực kiểu '8100.0'."""
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        try:
+            return int(float(v))
+        except (TypeError, ValueError):
+            return 0
+
+
+def _gachthefast_callback_impl():
+    # Chấp nhận cả 3 kiểu gachthefast có thể gửi: JSON body, form-urlencoded body, hoặc query string
+    data = request.get_json(silent=True) or {}
+    if not data and request.form:
+        data = request.form.to_dict()
+    if not data and request.args:
+        data = request.args.to_dict()
+
     request_id = str(data.get("request_id", ""))
     topup = col_card_topups.find_one({"request_id": request_id})
     if not topup:
@@ -1115,7 +1156,7 @@ def gachthefast_callback():
         return jsonify({"status": "already_processed"}), 200
 
     status        = str(data.get("status", ""))
-    amount_credit = int(data.get("amount", 0) or 0)   # số tiền THỰC NHẬN (đã trừ phí gachthefast)
+    amount_credit = _safe_int(data.get("amount", 0))   # số tiền THỰC NHẬN (đã trừ phí gachthefast)
     real_value    = data.get("value")
 
     if status == "99":
@@ -2649,9 +2690,9 @@ def admin_settings():
         log_admin("Cập nhật cấu hình hệ thống")
         flash("Đã lưu cấu hình.", "success")
         return redirect(url_for("admin_settings"))
-    webhook_url = request.host_url.rstrip("/") + "/sepay-webhook"
-    gachthefast_callback_url = request.host_url.rstrip("/") + "/charge/callback"
-    api_base = request.host_url.rstrip("/") + "/api/v1"
+    webhook_url = public_base_url() + "/sepay-webhook"
+    gachthefast_callback_url = public_base_url() + "/charge/callback"
+    api_base = public_base_url() + "/api/v1"
     return render_template("admin_settings.html",
                            cfg=get_config(), webhook_url=webhook_url, api_base=api_base,
                            gachthefast_callback_url=gachthefast_callback_url,
@@ -3009,7 +3050,7 @@ def sitemap():
     urls = [url_for("home", _external=True),
             url_for("posts", _external=True)]
     for p in col_products.find({"enabled": True}, {"_id": 1, "updated_at": 1, "created_at": 1}):
-        urls.append(request.host_url.rstrip("/") + url_for("product_detail", pid=p["_id"]))
+        urls.append(public_base_url() + url_for("product_detail", pid=p["_id"]))
     xml = ['<?xml version="1.0" encoding="UTF-8"?>',
            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
     for u in urls:
@@ -3021,7 +3062,7 @@ def sitemap():
 @app.route("/robots.txt")
 def robots():
     body = "User-agent: *\nAllow: /\nDisallow: /admin/\nDisallow: /api/\n"
-    body += f"Sitemap: {request.host_url.rstrip('/')}/sitemap.xml\n"
+    body += f"Sitemap: {public_base_url()}/sitemap.xml\n"
     return Response(body, mimetype="text/plain")
 
 
