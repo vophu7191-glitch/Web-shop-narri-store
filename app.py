@@ -20,7 +20,6 @@ from flask import (
 from pymongo import MongoClient, ReturnDocument
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
-from werkzeug.middleware.proxy_fix import ProxyFix
 
 # 2FA (TOTP) + QR code — optional but recommended
 try:
@@ -42,28 +41,7 @@ MONGO_URI  = os.environ.get("MONGO_URI", "").strip()
 SECRET_KEY = os.environ.get("SECRET_KEY", "").strip() or secrets.token_hex(32)
 
 app = Flask(__name__)
-# Render (và các PaaS khác) chạy app sau proxy TLS: proxy nhận https rồi forward
-# http xuống app kèm header X-Forwarded-Proto. Không có ProxyFix thì Flask luôn
-# nghĩ request là http -> request.host_url sinh ra "http://..." -> gachthefast
-# gọi callback vào URL http -> bị Render redirect 307 sang https -> callback lỗi.
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
-app.config["PREFERRED_URL_SCHEME"] = "https"
 app.config["SECRET_KEY"] = SECRET_KEY
-
-FORCE_HTTPS_URLS = os.environ.get("FORCE_HTTPS_URLS", "1").strip() != "0"
-
-
-def public_base_url():
-    """request.host_url nhưng luôn trả về https (trừ khi chạy local/dev hoặc
-    tắt bằng env FORCE_HTTPS_URLS=0). Một số domain custom qua thêm proxy/CDN
-    không truyền đúng X-Forwarded-Proto nên ProxyFix không đủ tin cậy — hàm
-    này ép cứng https để các URL đưa cho SePay/gachthefast luôn đúng."""
-    base = request.host_url.rstrip("/")
-    if FORCE_HTTPS_URLS and base.startswith("http://") and not (
-        request.host.startswith("127.0.0.1") or request.host.startswith("localhost")
-    ):
-        base = "https://" + base[len("http://"):]
-    return base
 # Session cookie an toàn hơn 1 chút: HttpOnly + SameSite=Lax (Secure sẽ tự bật
 # ở proxy TLS như Render, không ép Secure ở đây để dev localhost vẫn dùng được).
 app.config.update(
@@ -317,6 +295,7 @@ def get_config():
             "gachthefast_secret_key": "",
             "gachthefast_enabled": False,
             "background_music_url": "",         # để trống -> không hiện nút nhạc
+            "bot_callback_url": "",             # link callback riêng của bot Discord (relay)
         }
         col_config.insert_one(cfg)
     else:
@@ -338,6 +317,7 @@ def get_config():
             "gachthefast_secret_key": "",
             "gachthefast_enabled": False,
             "background_music_url": "",
+            "bot_callback_url": "",
         }
         changed = False
         for k, v in defaults.items():
@@ -789,7 +769,7 @@ def wallet():
         total_deposited = agg[0]["total"]
 
     referral_count = col_users.count_documents({"referred_by": u["_id"]})
-    referral_link = public_base_url() + url_for("register") + f"?ref={u['_id']}"
+    referral_link = request.host_url.rstrip("/") + url_for("register") + f"?ref={u['_id']}"
 
     return render_template("wallet.html", u=u, qr_url=qr_url, total_deposited=total_deposited,
                             transfer_content=f"NAPU{u['_id']}", orders=orders,
@@ -1032,31 +1012,16 @@ def gachthefast_sign(cfg, code, serial):
 
 
 def _gachthefast_call(cfg, params):
-    import urllib.request, urllib.parse, urllib.error
+    import urllib.request, urllib.parse
     domain = (cfg.get("gachthefast_domain", "") or "gachthefast.com").strip()
-    domain = domain.replace("http://", "https://")
     if not domain.startswith("http"):
-        domain = "https://" + domain
+        domain = "http://" + domain
     url = f"{domain}/chargingws/v2"
     data = urllib.parse.urlencode(params).encode("utf-8")
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-        "Accept": "application/json",
-    }
     try:
-        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+        req = urllib.request.Request(url, data=data, method="POST")
         with urllib.request.urlopen(req, timeout=15) as resp:
-            raw = resp.read().decode("utf-8", errors="replace")
-            try:
-                return json.loads(raw)
-            except ValueError:
-                print(f"[gachthefast] non-JSON response (status {resp.status}): {raw[:300]}")
-                return None
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="replace")
-        print(f"[gachthefast] HTTP {e.code}: {body[:300]}")
-        return None
+            return json.loads(resp.read().decode("utf-8"))
     except Exception as e:
         print(f"[gachthefast] call err: {e}")
         return None
@@ -1068,13 +1033,6 @@ def _gachthefast_call(cfg, params):
 def charge_card():
     u = current_user()
     cfg = get_config()
-    # Fallback cấu hình gachthefast từ biến môi trường (Render) nếu chưa lưu qua /admin/settings
-    if not cfg.get("gachthefast_partner_id"):
-        cfg["gachthefast_partner_id"] = os.environ.get("GACHTHEFAST_PARTNER_ID", "")
-    if not cfg.get("gachthefast_secret_key"):
-        cfg["gachthefast_secret_key"] = os.environ.get("GACHTHEFAST_SECRET_KEY", "")
-    if not cfg.get("gachthefast_enabled") and os.environ.get("GACHTHEFAST_PARTNER_ID"):
-        cfg["gachthefast_enabled"] = True
     if not cfg.get("gachthefast_enabled") or not cfg.get("gachthefast_partner_id"):
         flash("Nạp thẻ cào hiện chưa được bật. Vui lòng chọn cách nạp khác.", "error")
         return redirect(url_for("wallet"))
@@ -1119,44 +1077,31 @@ def charge_card():
 
 
 @app.route("/charge/callback", methods=["GET", "POST"])
+@app.route("/gachthefast-callback", methods=["GET", "POST"])
 def gachthefast_callback():
     """gachthefast gọi ngược route này khi xử lý xong thẻ (không có session -> không qua csrf_protect)."""
-    try:
-        return _gachthefast_callback_impl()
-    except Exception:
-        import traceback
-        traceback.print_exc()  # in đầy đủ traceback ra Render logs để biết lỗi thật
-        return jsonify({"status": "error"}), 200  # trả 200 để gachthefast không retry loạn lên trong lúc debug
-
-
-def _safe_int(v):
-    """Ép kiểu int an toàn: chấp nhận cả số, chuỗi số, chuỗi số thực kiểu '8100.0'."""
-    try:
-        return int(v)
-    except (TypeError, ValueError):
-        try:
-            return int(float(v))
-        except (TypeError, ValueError):
-            return 0
-
-
-def _gachthefast_callback_impl():
-    # Chấp nhận cả 3 kiểu gachthefast có thể gửi: JSON body, form-urlencoded body, hoặc query string
-    data = request.get_json(silent=True) or {}
-    if not data and request.form:
-        data = request.form.to_dict()
-    if not data and request.args:
-        data = request.args.to_dict()
-
+    data = request.get_json(silent=True) or request.args.to_dict() or {}
     request_id = str(data.get("request_id", ""))
     topup = col_card_topups.find_one({"request_id": request_id})
     if not topup:
+        # Không phải đơn của web -> chuyển tiếp cho bot Discord (vì gachthefast chỉ cho 1 link callback cố định)
+        bot_url = get_config().get("bot_callback_url", "").strip()
+        if bot_url:
+            try:
+                import urllib.request
+                req = urllib.request.Request(
+                    bot_url, data=json.dumps(data).encode("utf-8"),
+                    headers={"Content-Type": "application/json"}, method="POST",
+                )
+                urllib.request.urlopen(req, timeout=8)
+            except Exception as e:
+                print(f"[gachthefast] relay to bot failed: {e}")
         return jsonify({"status": "ignored"}), 200
     if topup["status"] != "pending":
         return jsonify({"status": "already_processed"}), 200
 
     status        = str(data.get("status", ""))
-    amount_credit = _safe_int(data.get("amount", 0))   # số tiền THỰC NHẬN (đã trừ phí gachthefast)
+    amount_credit = int(data.get("amount", 0) or 0)   # số tiền THỰC NHẬN (đã trừ phí gachthefast)
     real_value    = data.get("value")
 
     if status == "99":
@@ -2686,13 +2631,14 @@ def admin_settings():
             "gachthefast_partner_id":  request.form.get("gachthefast_partner_id", "").strip(),
             "gachthefast_secret_key":  request.form.get("gachthefast_secret_key", "").strip(),
             "background_music_url":    request.form.get("background_music_url", "").strip(),
+            "bot_callback_url":        request.form.get("bot_callback_url", "").strip(),
         }}, upsert=True)
         log_admin("Cập nhật cấu hình hệ thống")
         flash("Đã lưu cấu hình.", "success")
         return redirect(url_for("admin_settings"))
-    webhook_url = public_base_url() + "/sepay-webhook"
-    gachthefast_callback_url = public_base_url() + "/charge/callback"
-    api_base = public_base_url() + "/api/v1"
+    webhook_url = request.host_url.rstrip("/") + "/sepay-webhook"
+    gachthefast_callback_url = request.host_url.rstrip("/") + "/charge/callback"
+    api_base = request.host_url.rstrip("/") + "/api/v1"
     return render_template("admin_settings.html",
                            cfg=get_config(), webhook_url=webhook_url, api_base=api_base,
                            gachthefast_callback_url=gachthefast_callback_url,
@@ -3050,7 +2996,7 @@ def sitemap():
     urls = [url_for("home", _external=True),
             url_for("posts", _external=True)]
     for p in col_products.find({"enabled": True}, {"_id": 1, "updated_at": 1, "created_at": 1}):
-        urls.append(public_base_url() + url_for("product_detail", pid=p["_id"]))
+        urls.append(request.host_url.rstrip("/") + url_for("product_detail", pid=p["_id"]))
     xml = ['<?xml version="1.0" encoding="UTF-8"?>',
            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
     for u in urls:
@@ -3062,7 +3008,7 @@ def sitemap():
 @app.route("/robots.txt")
 def robots():
     body = "User-agent: *\nAllow: /\nDisallow: /admin/\nDisallow: /api/\n"
-    body += f"Sitemap: {public_base_url()}/sitemap.xml\n"
+    body += f"Sitemap: {request.host_url.rstrip('/')}/sitemap.xml\n"
     return Response(body, mimetype="text/plain")
 
 
