@@ -20,6 +20,7 @@ from flask import (
 from pymongo import MongoClient, ReturnDocument
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # 2FA (TOTP) + QR code — optional but recommended
 try:
@@ -41,6 +42,10 @@ MONGO_URI  = os.environ.get("MONGO_URI", "").strip()
 SECRET_KEY = os.environ.get("SECRET_KEY", "").strip() or secrets.token_hex(32)
 
 app = Flask(__name__)
+# Render đặt app sau 1 lớp proxy xử lý HTTPS -> không có dòng này Flask sẽ nhận
+# nhầm mọi request là "http", khiến link tạo ra (vd Callback URL gachthefast,
+# webhook SePay) bị thiếu chữ "s". x_proto=1 nghĩa là tin 1 lớp proxy (Render).
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 app.config["SECRET_KEY"] = SECRET_KEY
 # Session cookie an toàn hơn 1 chút: HttpOnly + SameSite=Lax (Secure sẽ tự bật
 # ở proxy TLS như Render, không ép Secure ở đây để dev localhost vẫn dùng được).
