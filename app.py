@@ -47,7 +47,7 @@ app = Flask(__name__)
 # webhook SePay) bị thiếu chữ "s". x_proto=1 nghĩa là tin 1 lớp proxy (Render).
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 app.config["SECRET_KEY"] = SECRET_KEY
-# Session cookie an toàn hơn 1 chút: HttpsOnly + SameSite=Lax (Secure sẽ tự bật
+# Session cookie an toàn hơn 1 chút: HttpOnly + SameSite=Lax (Secure sẽ tự bật
 # ở proxy TLS như Render, không ép Secure ở đây để dev localhost vẫn dùng được).
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
@@ -1019,9 +1019,9 @@ def gachthefast_sign(cfg, code, serial):
 def _gachthefast_call(cfg, params):
     import urllib.request, urllib.parse
     domain = (cfg.get("gachthefast_domain", "") or "gachthefast.com").strip()
-    if not domain.startswith("https"):
+    if not domain.startswith("http"):
         domain = "https://" + domain
-    url = f"{domain}/chargingws/v2"
+    url = f"{domain}/api/charging-w2"
     data = urllib.parse.urlencode(params).encode("utf-8")
     try:
         req = urllib.request.Request(url, data=data, method="POST")
@@ -1050,7 +1050,7 @@ def charge_card():
     except ValueError:
         amount = 0
 
-    if telco not in {"VIETTEL", "VINAPHONE", "MOBIFONE", "GATE", "ZING", "GARENA"} or not code or not serial or amount <= 0:
+    if telco not in {"VIETTEL", "VINAPHONE", "MOBIFONE", "GATE", "ZING"} or not code or not serial or amount <= 0:
         flash("Vui lòng nhập đầy đủ và đúng thông tin thẻ.", "error")
         return redirect(url_for("wallet"))
 
@@ -2641,9 +2641,13 @@ def admin_settings():
         log_admin("Cập nhật cấu hình hệ thống")
         flash("Đã lưu cấu hình.", "success")
         return redirect(url_for("admin_settings"))
-    webhook_url = request.host_url.rstrip("/") + "/sepay-webhook"
-    gachthefast_callback_url = request.host_url.rstrip("/") + "/charge/callback"
-    api_base = request.host_url.rstrip("/") + "/api/v1"
+    # Cố định https:// (không dùng request.host_url) — domain này luôn chạy sau
+    # SSL (Render/Cloudflare), nên khỏi phụ thuộc proxy có chuyển tiếp đúng
+    # X-Forwarded-Proto hay không, tránh lặp lại lỗi hiển thị nhầm "http://".
+    _host = request.host  # chỉ lấy tên miền, không lấy scheme
+    webhook_url = f"https://{_host}/sepay-webhook"
+    gachthefast_callback_url = f"https://{_host}/charge/callback"
+    api_base = f"https://{_host}/api/v1"
     return render_template("admin_settings.html",
                            cfg=get_config(), webhook_url=webhook_url, api_base=api_base,
                            gachthefast_callback_url=gachthefast_callback_url,
