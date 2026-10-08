@@ -315,6 +315,7 @@ def get_config():
             "gachthefast_partner_id": "",
             "gachthefast_secret_key": "",
             "gachthefast_enabled": False,
+            "gachthefast_discount": {"viettel": 0, "vinaphone": 0, "mobifone": 0, "gate": 0, "zing": 0},
             "background_music_url": "",         # để trống -> không hiện nút nhạc
             "bot_callback_url": "",             # link callback riêng của bot Discord (relay)
         }
@@ -337,6 +338,7 @@ def get_config():
             "gachthefast_partner_id": "",
             "gachthefast_secret_key": "",
             "gachthefast_enabled": False,
+            "gachthefast_discount": {"viettel": 0, "vinaphone": 0, "mobifone": 0, "gate": 0, "zing": 0},
             "background_music_url": "",
             "bot_callback_url": "",
         }
@@ -1169,28 +1171,34 @@ def _gachthefast_callback_impl():
         return jsonify({"status": "pending"}), 200
 
     if status in ("1", "2") and amount_credit > 0:
-        # 1 = đúng mệnh giá, 2 = sai mệnh giá nhưng thẻ vẫn được chấp nhận (cộng đúng số tiền thực nhận)
+        # 1 = đúng mệnh giá, 2 = sai mệnh giá nhưng thẻ vẫn được chấp nhận (cộng theo số tiền thực nhận)
+        # Chiết khấu thêm của chủ shop (ngoài phần gachthefast đã trừ sẵn trong amount_credit):
+        cfg_discount = get_config().get("gachthefast_discount", {}) or {}
+        discount_pct = float(cfg_discount.get(topup["telco"].lower(), 0) or 0)
+        credited_amount = round(amount_credit * (100 - discount_pct) / 100)
+
         col_card_topups.update_one({"_id": topup["_id"]}, {"$set": {
-            "status": "success", "value": real_value, "credited_amount": amount_credit,
+            "status": "success", "value": real_value, "credited_amount": credited_amount,
+            "gachthefast_amount": amount_credit, "discount_pct": discount_pct,
             "trans_id": data.get("trans_id"), "updated_at": datetime.now(timezone.utc),
         }})
-        col_users.update_one({"_id": topup["user_id"]}, {"$inc": {"balance": amount_credit}})
+        col_users.update_one({"_id": topup["user_id"]}, {"$inc": {"balance": credited_amount}})
         col_recharges.insert_one({
             "_id": uuid.uuid4().hex[:12],
             "user_id": topup["user_id"], "username": topup["username"],
-            "amount": amount_credit, "bank": f"Thẻ cào {topup['telco']}",
+            "amount": credited_amount, "bank": f"Thẻ cào {topup['telco']}",
             "source": "gachthefast", "created_at": datetime.now(timezone.utc),
         })
         note = "đúng mệnh giá" if status == "1" else "SAI mệnh giá, cộng theo số tiền thực nhận"
         log_activity(topup["user_id"], topup["username"],
-                     f"Nạp thẻ cào {topup['telco']} thành công ({note}) +{amount_credit:,}đ")
+                     f"Nạp thẻ cào {topup['telco']} thành công ({note}, chiết khấu {discount_pct:g}%) +{credited_amount:,}đ")
         cfg = get_config()
         if cfg.get("referral_on_recharge"):
-            _award_referral_commission(topup["user_id"], amount_credit, f"nạp thẻ {topup['telco']}")
+            _award_referral_commission(topup["user_id"], credited_amount, f"nạp thẻ {topup['telco']}")
         notify_admins(
             kind="recharge", title="💳 Nạp thẻ cào thành công",
-            message=f"{topup['username']} nạp thẻ {topup['telco']} +{amount_credit:,}đ" + ("" if status == "1" else " (sai mệnh giá)"),
-            url=url_for("admin_recharges"), meta={"user_id": topup["user_id"], "amount": amount_credit},
+            message=f"{topup['username']} nạp thẻ {topup['telco']} +{credited_amount:,}đ" + ("" if status == "1" else " (sai mệnh giá)"),
+            url=url_for("admin_recharges"), meta={"user_id": topup["user_id"], "amount": credited_amount},
         )
     else:
         # 3 = thẻ lỗi, 4 = hệ thống bảo trì, 100 = gửi thẻ thất bại
@@ -2690,6 +2698,10 @@ def admin_settings():
             "gachthefast_domain":      request.form.get("gachthefast_domain", "gachthefast.com").strip(),
             "gachthefast_partner_id":  request.form.get("gachthefast_partner_id", "").strip(),
             "gachthefast_secret_key":  request.form.get("gachthefast_secret_key", "").strip(),
+            "gachthefast_discount": {
+                telco: max(0.0, min(99.0, float(request.form.get(f"gachthefast_discount_{telco}", "0") or 0)))
+                for telco in ("viettel", "vinaphone", "mobifone", "gate", "zing")
+            },
             "background_music_url":    request.form.get("background_music_url", "").strip(),
             "bot_callback_url":        request.form.get("bot_callback_url", "").strip(),
         }}, upsert=True)
