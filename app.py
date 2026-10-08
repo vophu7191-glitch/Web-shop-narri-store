@@ -1019,7 +1019,7 @@ def gachthefast_sign(cfg, code, serial):
 def _gachthefast_call(cfg, params):
     import urllib.request, urllib.parse
     domain = (cfg.get("gachthefast_domain", "") or "gachthefast.com").strip()
-    if not domain.startswith("http"):
+    if not domain.startswith("https"):
         domain = "https://" + domain
     url = f"{domain}/chargingws/v2"
     data = urllib.parse.urlencode(params).encode("utf-8")
