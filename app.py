@@ -47,7 +47,7 @@ app = Flask(__name__)
 # webhook SePay) bị thiếu chữ "s". x_proto=1 nghĩa là tin 1 lớp proxy (Render).
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 app.config["SECRET_KEY"] = SECRET_KEY
-# Session cookie an toàn hơn 1 chút: HttpOnly + SameSite=Lax (Secure sẽ tự bật
+# Session cookie an toàn hơn 1 chút: HttpsOnly + SameSite=Lax (Secure sẽ tự bật
 # ở proxy TLS như Render, không ép Secure ở đây để dev localhost vẫn dùng được).
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
@@ -1020,7 +1020,7 @@ def _gachthefast_call(cfg, params):
     import urllib.request, urllib.parse
     domain = (cfg.get("gachthefast_domain", "") or "gachthefast.com").strip()
     if not domain.startswith("http"):
-        domain = "http://" + domain
+        domain = "https://" + domain
     url = f"{domain}/chargingws/v2"
     data = urllib.parse.urlencode(params).encode("utf-8")
     try:
@@ -1050,7 +1050,7 @@ def charge_card():
     except ValueError:
         amount = 0
 
-    if telco not in {"VIETTEL", "VINAPHONE", "MOBIFONE", "GATE", "ZING"} or not code or not serial or amount <= 0:
+    if telco not in {"VIETTEL", "VINAPHONE", "MOBIFONE", "GATE", "ZING", "GARENA"} or not code or not serial or amount <= 0:
         flash("Vui lòng nhập đầy đủ và đúng thông tin thẻ.", "error")
         return redirect(url_for("wallet"))
 
