@@ -137,9 +137,9 @@
         </div>
         <p class="text-muted small">Callback URL cần khai báo bên gachthefast: <code>{{ gachthefast_callback_url }}</code></p>
 
-        <label class="mt-2">Chiết khấu thêm theo từng nhà mạng (%) — trừ thêm vào số tiền khách nhận, ngoài phần gachthefast đã tự trừ sẵn</label>
+        <label class="mt-2">Chiết khấu thêm theo từng loại thẻ (%) — trừ thêm vào số tiền khách nhận, ngoài phần gachthefast đã tự trừ sẵn</label>
         <div class="form-row">
-            {% for telco_key, telco_label in [('viettel','Viettel'), ('vinaphone','Vinaphone'), ('mobifone','Mobifone'), ('gate','Gate'), ('zing','Zing')] %}
+            {% for telco_key, telco_label in [('viettel','Viettel'), ('vinaphone','Vinaphone'), ('mobifone','Mobifone'), ('zing','Zing'), ('garenacham','Garena tốt'), ('garena','Garena'), ('vcoin','Vcoin'), ('scoin','Scoin'), ('gate','Gate')] %}
             <div class="col-md-2 col-4 form-group">
                 <label class="small mb-1">{{ telco_label }}</label>
                 <div class="input-group input-group-sm">
