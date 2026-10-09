@@ -315,7 +315,8 @@ def get_config():
             "gachthefast_partner_id": "",
             "gachthefast_secret_key": "",
             "gachthefast_enabled": False,
-            "gachthefast_discount": {"viettel": 0, "vinaphone": 0, "mobifone": 0, "gate": 0, "zing": 0},
+            "gachthefast_discount": {"viettel": 0, "vinaphone": 0, "mobifone": 0, "zing": 0,
+                                       "garenacham": 0, "garena": 0, "vcoin": 0, "scoin": 0, "gate": 0},
             "background_music_url": "",         # để trống -> không hiện nút nhạc
             "bot_callback_url": "",             # link callback riêng của bot Discord (relay)
         }
@@ -338,7 +339,8 @@ def get_config():
             "gachthefast_partner_id": "",
             "gachthefast_secret_key": "",
             "gachthefast_enabled": False,
-            "gachthefast_discount": {"viettel": 0, "vinaphone": 0, "mobifone": 0, "gate": 0, "zing": 0},
+            "gachthefast_discount": {"viettel": 0, "vinaphone": 0, "mobifone": 0, "zing": 0,
+                                       "garenacham": 0, "garena": 0, "vcoin": 0, "scoin": 0, "gate": 0},
             "background_music_url": "",
             "bot_callback_url": "",
         }
@@ -1027,6 +1029,25 @@ col_card_topups.create_index([("created_at", -1)])
 col_card_topups.create_index("request_id", unique=True)
 
 
+# Danh mục loại thẻ gachthefast.com hỗ trợ (đồng bộ với mapping đã xác nhận bên bot Discord).
+# key = giá trị <select> web gửi lên & khoá lưu chiết khấu trong gachthefast_discount.
+# telco_param = giá trị THẬT gửi trong field "telco" của API — PHẢI giữ đúng hoa/thường,
+# một số mã (garenacham, garena, vcoin, scoin...) phải viết thường, KHÔNG được .upper().
+# confirmed=False nghĩa là CHƯA được gachthefast xác nhận chính thức qua kênh hỗ trợ —
+# nên test bằng 1 thẻ mệnh giá nhỏ trước khi tin tưởng dùng thật.
+GACHTHEFAST_CARD_CATALOG = {
+    "viettel":    {"label": "Viettel",         "telco_param": "VIETTEL",    "confirmed": True},
+    "vinaphone":  {"label": "Vinaphone",       "telco_param": "VINAPHONE",  "confirmed": True},
+    "mobifone":   {"label": "Mobifone",        "telco_param": "MOBIFONE",   "confirmed": True},
+    "zing":       {"label": "Zing",            "telco_param": "ZING",       "confirmed": True},
+    "garenacham": {"label": "Garena (giá tốt)","telco_param": "garenacham", "confirmed": True},
+    "garena":     {"label": "Garena",          "telco_param": "garena",     "confirmed": False},
+    "vcoin":      {"label": "Vcoin",           "telco_param": "vcoin",      "confirmed": False},
+    "scoin":      {"label": "Scoin",           "telco_param": "scoin",      "confirmed": False},
+    "gate":       {"label": "Gate",            "telco_param": "GATE",       "confirmed": False},
+}
+
+
 def gachthefast_sign(cfg, code, serial):
     """Theo tài liệu chính thức: sign = md5(partner_key + code + serial)."""
     secret = cfg.get("gachthefast_secret_key", "")
@@ -1075,17 +1096,19 @@ def charge_card():
         flash("Nạp thẻ cào hiện chưa được bật. Vui lòng chọn cách nạp khác.", "error")
         return redirect(url_for("wallet"))
 
-    telco  = (request.form.get("telco") or "").strip().upper()
-    code   = (request.form.get("code") or "").strip()
-    serial = (request.form.get("serial") or "").strip()
+    card_key = (request.form.get("telco") or "").strip().lower()
+    code     = (request.form.get("code") or "").strip()
+    serial   = (request.form.get("serial") or "").strip()
     try:
         amount = int(request.form.get("amount", "0"))
     except ValueError:
         amount = 0
 
-    if telco not in {"VIETTEL", "VINAPHONE", "MOBIFONE", "GATE", "ZING"} or not code or not serial or amount <= 0:
+    card_info = GACHTHEFAST_CARD_CATALOG.get(card_key)
+    if not card_info or not code or not serial or amount <= 0:
         flash("Vui lòng nhập đầy đủ và đúng thông tin thẻ.", "error")
         return redirect(url_for("wallet"))
+    telco = card_info["telco_param"]  # giữ nguyên hoa/thường theo catalog, KHÔNG .upper()
 
     request_id = uuid.uuid4().hex[:16]
     sign = gachthefast_sign(cfg, code, serial)
@@ -1105,7 +1128,7 @@ def charge_card():
         "request_id": request_id, "trans_id": (result or {}).get("trans_id"),
         "status": "pending", "created_at": datetime.now(timezone.utc),
     })
-    log_activity(u["_id"], u["username"], f"Gửi thẻ cào {telco} mệnh giá {amount:,}đ")
+    log_activity(u["_id"], u["username"], f"Gửi thẻ cào {card_info['label']} mệnh giá {amount:,}đ")
 
     if result is None:
         flash("Không kết nối được tới gachthefast, vui lòng thử lại sau.", "error")
@@ -1122,7 +1145,7 @@ def gachthefast_callback():
     except Exception:
         import traceback
         traceback.print_exc()  # in traceback đầy đủ ra Render logs
-        return jsonify({"status": "error"}), 200  # trả 200 để gachthefast không retry loạn trong lúc debug
+        return jsonify({"status": "error"}), 200  # trả 200 để gachthefast không retry loạn
 
 
 def _safe_int(v):
@@ -2700,7 +2723,7 @@ def admin_settings():
             "gachthefast_secret_key":  request.form.get("gachthefast_secret_key", "").strip(),
             "gachthefast_discount": {
                 telco: max(0.0, min(99.0, float(request.form.get(f"gachthefast_discount_{telco}", "0") or 0)))
-                for telco in ("viettel", "vinaphone", "mobifone", "gate", "zing")
+                for telco in GACHTHEFAST_CARD_CATALOG.keys()
             },
             "background_music_url":    request.form.get("background_music_url", "").strip(),
             "bot_callback_url":        request.form.get("bot_callback_url", "").strip(),
