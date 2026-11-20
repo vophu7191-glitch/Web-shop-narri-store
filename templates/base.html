@@ -187,10 +187,12 @@
     <div class="iq-top-navbar">
         <div class="iq-navbar-custom">
             <nav class="navbar navbar-expand-lg navbar-light p-0">
-                <div class="side-menu-bt-sidebar" onclick="NarriLayout.toggleSidebar()">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="text-secondary wrapper-menu" width="30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-                    </svg>
+                <div class="side-menu-bt-sidebar">
+                    <button type="button" class="narri-menu-toggle" onclick="NarriLayout.toggleSidebar()" aria-label="Mở menu" aria-controls="narriSidebar" aria-expanded="false">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="wrapper-menu" width="26" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                        </svg>
+                    </button>
                     <a href="#" class="badge border border-secondary text-secondary ml-1" onclick="toggleDark(event);" title="Đổi giao diện sáng/tối" style="cursor:pointer;">🌓</a>
                     {% if current_user %}
                         <span class="badge border border-primary text-primary ml-1"><i class="fas fa-wallet mr-1"></i>Ví: <b>{{ "{:,}".format(current_user.balance) }}đ</b></span>
@@ -357,22 +359,21 @@
 })();
 </script>
 
-<div class="mobile-bottom-bar">
-    <a href="{{ url_for('wallet') if current_user else url_for('login') }}">
-        <div><i class="fas fa-wallet"></i></div>
-        <div class="small font-weight-bold">
-            {% if current_user %}{{ "{:,}".format(current_user.balance) }}đ{% else %}Đăng nhập{% endif %}
-        </div>
+<nav class="mobile-bottom-bar" aria-label="Điều hướng nhanh">
+    {% if current_user and current_user.role == 'admin' %}
+    <a href="{{ url_for('admin_dashboard') }}" class="{% if request.endpoint == 'admin_dashboard' %}active{% endif %}">
+        <i class="fas fa-chart-pie" aria-hidden="true"></i><span>Dashboard</span>
     </a>
-    <a href="{{ url_for('home') }}">
-        <div style="font-size:1.3rem;">☁️</div>
-        <div class="small font-weight-bold">Trang chủ</div>
-    </a>
-    <a href="{{ url_for('orders') if current_user else url_for('login') }}">
-        <div><i class="fas fa-receipt"></i></div>
-        <div class="small font-weight-bold">Đơn hàng</div>
-    </a>
-</div>
+    <a href="{{ url_for('home') }}"><i class="fas fa-store" aria-hidden="true"></i><span>Shop</span></a>
+    <a href="{{ url_for('admin_orders') }}"><i class="fas fa-receipt" aria-hidden="true"></i><span>Đơn hàng</span></a>
+    <a href="{{ url_for('wallet') }}"><i class="fas fa-wallet" aria-hidden="true"></i><span>Ví</span></a>
+    {% else %}
+    <a href="{{ url_for('home') }}"><i class="fas fa-store" aria-hidden="true"></i><span>Shop</span></a>
+    <a href="{{ url_for('orders') if current_user else url_for('login') }}"><i class="fas fa-receipt" aria-hidden="true"></i><span>Đơn hàng</span></a>
+    <a href="{{ url_for('wallet') if current_user else url_for('login') }}"><i class="fas fa-wallet" aria-hidden="true"></i><span>Ví</span></a>
+    <a href="#narriSidebar" onclick="event.preventDefault(); NarriLayout.openSidebar();" aria-controls="narriSidebar"><i class="fas fa-bars" aria-hidden="true"></i><span>Danh mục</span></a>
+    {% endif %}
+</nav>
 
 <div id="activityToast"></div>
 
@@ -396,17 +397,9 @@
             }, wait);
         });
         function showLoader() { l.style.display = 'flex'; l.style.opacity = '1'; }
-        document.addEventListener('click', function (e) {
-            var a = e.target.closest('a[href]');
-            if (!a || a.target === '_blank' || a.hasAttribute('download')) return;
-            var href = a.getAttribute('href');
-            if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
-            try {
-                if (new URL(a.href, window.location.href).origin !== window.location.origin) return;
-            } catch (err) { return; }
-            showLoader();
+        document.addEventListener('submit', function (e) {
+            if (e.target && e.target.tagName === 'FORM') showLoader();
         });
-        document.addEventListener('submit', function () { showLoader(); });
     })();
 
     (function () {
