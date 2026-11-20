@@ -107,6 +107,7 @@
     </style>
     {% block extra_head %}{% endblock %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/narri-theme.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/narri-motion.css') }}">
 </head>
 <body>
 
@@ -511,6 +512,8 @@
         });
     })();
 </script>
+
+<script src="{{ url_for('static', filename='js/narri-motion.js') }}" defer></script>
 
 </body>
 </html>

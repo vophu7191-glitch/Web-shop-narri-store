@@ -161,6 +161,7 @@ new Chart(document.getElementById('chartRevenue'), {
     },
     options: {
         responsive: true,
+        animation: { duration: 850, easing: 'easeOutQuart' },
         interaction: { intersect: false, mode: 'index' },
         scales: {
             y:  { position: 'left',  beginAtZero: true, title: { display: true, text: 'VNĐ' } },
