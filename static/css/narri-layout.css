@@ -44,3 +44,49 @@ body{background-color:var(--narri-shell-bg)}
 @media(prefers-reduced-motion:reduce){
   .iq-sidebar.narri-sidebar,.narri-nav .side-menu li a{transition:none!important}
 }
+
+
+/* Refined responsive application navigation */
+.narri-menu-toggle {
+  display:inline-flex;align-items:center;justify-content:center;
+  width:42px;height:42px;padding:0;border:1px solid var(--narri-shell-border);
+  border-radius:12px;color:#e8e2ff;background:rgba(255,255,255,.06);
+  cursor:pointer;transition:background .18s ease,border-color .18s ease;
+}
+.narri-menu-toggle:hover,.narri-menu-toggle:focus-visible {
+  color:#fff;background:rgba(145,108,255,.2);border-color:rgba(167,139,250,.45);
+  outline:none;
+}
+.narri-nav .side-menu li a.active,
+.narri-nav .side-menu li a.active-brand {
+  color:#fff!important;background:linear-gradient(110deg,rgba(121,87,255,.34),rgba(145,108,255,.12))!important;
+  box-shadow:inset 3px 0 #a78bfa;
+}
+.mobile-bottom-bar {
+  display:none;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;
+  padding:8px 8px calc(8px + env(safe-area-inset-bottom));
+}
+.mobile-bottom-bar a {
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  min-height:48px;padding:5px 2px;border-radius:12px;color:#dcd5ff!important;
+  font-size:.69rem;font-weight:700;line-height:1.1;text-decoration:none;
+}
+.mobile-bottom-bar a i {font-size:1.05rem;line-height:1.2}
+.mobile-bottom-bar a span {white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.mobile-bottom-bar a.active,.mobile-bottom-bar a:focus-visible {
+  color:#fff!important;background:rgba(121,87,255,.2);outline:none;
+}
+@media(max-width:991px){
+  .mobile-bottom-bar{display:grid}
+  .iq-top-navbar .side-menu-bt-sidebar{display:flex;align-items:center;gap:8px}
+  .iq-top-navbar .navbar{min-height:60px}
+  .iq-top-navbar .badge{max-width:42vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .content-page{padding-bottom:calc(76px + env(safe-area-inset-bottom))!important}
+}
+@media(min-width:992px){
+  .narri-menu-toggle{width:44px;height:44px}
+  .mobile-bottom-bar{display:none!important}
+}
+@media(prefers-reduced-motion:reduce){
+  .narri-menu-toggle,.mobile-bottom-bar a{transition:none!important}
+}
