@@ -1,64 +1,45 @@
-/* Narri Store motion layer: subtle, GPU-friendly effects */
-:root {
-  --narri-motion-glow: rgba(145, 108, 255, .18);
+/* Motion inspired by the Glassy Dashboard reference: soft entrance, lift and layered drawer */
+:root{--narri-motion-glow:rgba(145,108,255,.18)}
+html{scroll-behavior:smooth}
+.content-page>.container-fluid{animation:narri-content-enter .55s cubic-bezier(.2,.75,.25,1) both}
+@keyframes narri-content-enter{
+  from{opacity:0;transform:translate3d(0,14px,0)}
+  to{opacity:1;transform:translate3d(0,0,0)}
 }
-body {
-  background-size: 140% 140%, 140% 140%, auto;
-  animation: narri-bg-drift 22s ease-in-out infinite alternate;
+.card,.mini-card,.shop-panel,.activity-card,.product-card,.stat-card{
+  transform:translateZ(0);
+  transition:transform .28s cubic-bezier(.2,.8,.2,1),box-shadow .28s ease,border-color .28s ease,background-color .28s ease
 }
-@keyframes narri-bg-drift {
-  from { background-position: 0% 0%, 100% 15%, 0 0; }
-  to { background-position: 18% 12%, 82% 0%, 0 0; }
+.card:hover,.mini-card:hover,.shop-panel:hover,.activity-card:hover,.stat-card:hover{
+  transform:translate3d(0,-4px,0);
+  border-color:rgba(181,158,255,.38)!important;
+  box-shadow:0 18px 42px rgba(0,0,0,.25),0 0 22px var(--narri-motion-glow)
 }
-.card, .mini-card, .shop-panel, .activity-card, .product-card, .stat-card {
-  transform: translateZ(0);
-  transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease, background-color .22s ease;
+.product-card:hover{transform:translate3d(0,-5px,0);box-shadow:0 20px 38px rgba(0,0,0,.3)!important}
+.product-card .product-thumb img{transition:transform .45s cubic-bezier(.2,.8,.2,1)}
+.product-card:hover .product-thumb img{transform:scale(1.045)}
+.btn,.nav-link,.side-menu a,.mobile-bottom-bar a{transition:transform .22s cubic-bezier(.2,.8,.2,1),filter .22s ease,background-color .22s ease,box-shadow .22s ease}
+.btn:active,.nav-link:active{transform:scale(.97)}
+.narri-reveal{opacity:0;transform:translate3d(0,18px,0);transition:opacity .58s ease,transform .58s cubic-bezier(.2,.8,.2,1)}
+.narri-reveal.narri-visible{opacity:1;transform:translate3d(0,0,0)}
+.narri-sidebar .narri-nav .side-menu>li{animation:narri-nav-enter .42s cubic-bezier(.2,.8,.2,1) both}
+.narri-sidebar .narri-nav .side-menu>li:nth-child(1){animation-delay:.04s}
+.narri-sidebar .narri-nav .side-menu>li:nth-child(2){animation-delay:.07s}
+.narri-sidebar .narri-nav .side-menu>li:nth-child(3){animation-delay:.10s}
+.narri-sidebar .narri-nav .side-menu>li:nth-child(4){animation-delay:.13s}
+.narri-sidebar .narri-nav .side-menu>li:nth-child(5){animation-delay:.16s}
+.narri-sidebar .narri-nav .side-menu>li:nth-child(6){animation-delay:.19s}
+.narri-sidebar .narri-nav .side-menu>li:nth-child(7){animation-delay:.22s}
+@keyframes narri-nav-enter{from{opacity:0;transform:translate3d(-9px,0,0)}to{opacity:1;transform:translate3d(0,0,0)}}
+#pageLoader{background:#090b18!important}
+#pageLoader img{filter:drop-shadow(0 0 18px rgba(145,108,255,.32))}
+@media(max-width:767px){
+  .card:hover,.mini-card:hover,.shop-panel:hover,.activity-card:hover,.product-card:hover,.stat-card:hover{transform:none}
 }
-.card:hover, .mini-card:hover, .shop-panel:hover, .activity-card:hover {
-  border-color: rgba(167,139,250,.34) !important;
-  box-shadow: 0 16px 38px rgba(0,0,0,.26), 0 0 24px var(--narri-motion-glow);
-}
-.btn, .nav-link, .side-menu a, .mobile-bottom-bar a {
-  transition: transform .18s ease, filter .18s ease, background-color .18s ease, box-shadow .18s ease;
-}
-.btn:active, .nav-link:active { transform: scale(.975); }
-.product-card:hover .product-thumb img {
-  transform: scale(1.035);
-}
-.product-thumb img { transition: transform .35s ease; }
-.iq-sidebar { background-size: 100% 180% !important; animation: narri-sidebar-glow 16s ease-in-out infinite alternate; }
-@keyframes narri-sidebar-glow {
-  from { background-position: 50% 0%; }
-  to { background-position: 50% 100%; }
-}
-.narri-reveal {
-  opacity: 0;
-  transform: translate3d(0, 14px, 0);
-  transition: opacity .48s ease, transform .48s cubic-bezier(.2,.7,.2,1);
-}
-.narri-reveal.narri-visible { opacity: 1; transform: translate3d(0,0,0); }
-.dashboard-stats .stat-card { position: relative; overflow: hidden; }
-.dashboard-stats .stat-card::after {
-  content: "";
-  position: absolute;
-  inset: -60% auto -60% -45%;
-  width: 35%;
-  transform: rotate(22deg);
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,.12), transparent);
-  transition: left .65s ease;
-  pointer-events: none;
-}
-.dashboard-stats .stat-card:hover::after { left: 125%; }
-#pageLoader { background: #090b18 !important; }
-#pageLoader img { filter: drop-shadow(0 0 18px rgba(145,108,255,.32)); }
-@media (max-width: 767px) {
-  body { animation: none; background-size: auto; }
-  .card:hover, .mini-card:hover, .shop-panel:hover, .activity-card:hover { transform: none; }
-  .product-card:hover { transform: none; }
-  .iq-sidebar { animation: none; }
-}
-@media (prefers-reduced-motion: reduce) {
-  body, .iq-sidebar { animation: none !important; }
-  .narri-reveal { opacity: 1 !important; transform: none !important; transition: none !important; }
-  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
+@media(prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .content-page>.container-fluid{animation:none!important}
+  .narri-reveal{opacity:1!important;transform:none!important;transition:none!important}
+  .narri-sidebar .narri-nav .side-menu>li{animation:none!important}
+  *,*::before,*::after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important}
 }
