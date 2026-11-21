@@ -1,3 +1,18 @@
+/* Cross-document navigation transition: keeps page changes fluid without a blocking GIF */
+@view-transition{navigation:auto}
+::view-transition-old(root){
+  animation: narri-page-out .18s ease both;
+}
+::view-transition-new(root){
+  animation: narri-page-in .32s cubic-bezier(.2,.75,.25,1) both;
+}
+@keyframes narri-page-out{
+  to{opacity:.72;transform:scale(.995);filter:blur(1px)}
+}
+@keyframes narri-page-in{
+  from{opacity:.72;transform:translateY(7px);filter:blur(1px)}
+  to{opacity:1;transform:translateY(0);filter:blur(0)}
+}
 /* Motion inspired by the Glassy Dashboard reference: soft entrance, lift and layered drawer */
 :root{--narri-motion-glow:rgba(145,108,255,.18)}
 html{scroll-behavior:smooth}
