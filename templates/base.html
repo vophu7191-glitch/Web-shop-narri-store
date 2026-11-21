@@ -78,14 +78,6 @@
             position:fixed; inset:0; z-index:99999; background:#fff;
             display:flex; align-items:center; justify-content:center; transition:opacity .3s ease;
         }
-        .floating-heart{
-            position:fixed; bottom:-30px; font-size:1.3rem; color:#ff6b6b;
-            opacity:.85; pointer-events:none; z-index:9997; animation:floatUpHeart linear forwards;
-        }
-        @keyframes floatUpHeart{
-            0%   { transform:translateY(0) translateX(0) rotate(0deg); opacity:.85; }
-            100% { transform:translateY(-110vh) translateX(var(--drift, 20px)) rotate(20deg); opacity:0; }
-        }
         #activityToast{
             position:fixed; left:16px; bottom:16px; z-index:9996;
             background:#fff; border-left:4px solid #2D11FE; border-radius:10px;
@@ -407,20 +399,6 @@
         document.addEventListener('submit', function (e) {
             if (e.target && e.target.tagName === 'FORM') showLoader();
         });
-    })();
-
-    (function () {
-        function spawnHeart() {
-            var h = document.createElement('div');
-            h.className = 'floating-heart';
-            h.textContent = '❤';
-            h.style.left = (Math.random() * 100) + 'vw';
-            h.style.setProperty('--drift', (Math.random() * 60 - 30) + 'px');
-            h.style.animationDuration = (6 + Math.random() * 4) + 's';
-            document.body.appendChild(h);
-            setTimeout(function () { h.remove(); }, 10500);
-        }
-        setInterval(spawnHeart, 900);
     })();
 
     (function () {
