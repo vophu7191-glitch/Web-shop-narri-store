@@ -609,13 +609,17 @@ def get_top_buyers(limit=10, days=30):
 def home():
     brands_full = get_brands(enabled_only=True)
     products_by_brand = {}
+    stock_map = {
+        row["_id"]: row["count"]
+        for row in col_stock.aggregate([
+            {"$match": {"sold": False}},
+            {"$group": {"_id": "$product_id", "count": {"$sum": 1}}},
+        ])
+    }
     for b in brands_full:
         items = list(col_products.find({"brand": b, "enabled": True}).sort("price", 1))
         for it in items:
-            if it.get("fulfillment", "auto") == "manual":
-                it["stock_count"] = None
-            else:
-                it["stock_count"] = col_stock.count_documents({"product_id": it["_id"], "sold": False})
+            it["stock_count"] = None if it.get("fulfillment", "auto") == "manual" else stock_map.get(it["_id"], 0)
         products_by_brand[b] = items
 
     pinned_products = []
@@ -1891,12 +1895,19 @@ def admin_products():
     items = list(col_products.find(query).sort([("brand", 1), ("price", 1)]))
     cfg = get_config()
     low_thr = int(cfg.get("low_stock_threshold", 5) or 0)
+    stock_map = {
+        row["_id"]: row["count"]
+        for row in col_stock.aggregate([
+            {"$match": {"sold": False}},
+            {"$group": {"_id": "$product_id", "count": {"$sum": 1}}},
+        ])
+    }
     for it in items:
         if it.get("fulfillment", "auto") == "manual":
             it["stock_count"] = None
             it["is_low"] = False
         else:
-            it["stock_count"] = col_stock.count_documents({"product_id": it["_id"], "sold": False})
+            it["stock_count"] = stock_map.get(it["_id"], 0)
             it["is_low"] = it["stock_count"] <= low_thr
     return render_template("admin_products.html", items=items, q=q, brand_f=brand_f, low_thr=low_thr)
 
