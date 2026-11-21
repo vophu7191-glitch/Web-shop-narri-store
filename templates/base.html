@@ -104,8 +104,8 @@
 </head>
 <body>
 
-<div id="pageLoader">
-    <img src="{{ url_for('static', filename='images/gif_loaderRP3.gif') }}" alt="Đang tải..." style="width:72px;">
+<div id="pageLoader" aria-hidden="true" style="display:none">
+    <img src="{{ url_for('static', filename='images/gif_loaderRP3.gif') }}" alt="Đang xử lý..." style="width:72px;">
 </div>
 
 <div class="wrapper">
@@ -387,17 +387,13 @@
     (function () {
         var l = document.getElementById('pageLoader');
         if (!l) return;
-        window.addEventListener('load', function () {
-            var elapsed = performance.now();
-            var wait = Math.max(0, 450 - elapsed);
-            setTimeout(function () {
-                l.style.opacity = '0';
-                setTimeout(function () { l.style.display = 'none'; }, 300);
-            }, wait);
-        });
-        function showLoader() { l.style.display = 'flex'; l.style.opacity = '1'; }
+        function showLoader() {
+            l.style.display = 'flex';
+            l.style.opacity = '1';
+            l.setAttribute('aria-hidden', 'false');
+        }
         document.addEventListener('submit', function (e) {
-            if (e.target && e.target.tagName === 'FORM') showLoader();
+            if (e.target && e.target.tagName === 'FORM' && e.target.checkValidity()) showLoader();
         });
     })();
 
