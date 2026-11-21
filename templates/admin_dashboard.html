@@ -1,175 +1,80 @@
 {% extends "base.html" %}
 {% block title %}Dashboard{% endblock %}
 {% block extra_head %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<style>
-    .stat-card { border-radius: 14px; color: #fff; padding: 18px 20px; }
-    .stat-card .title { font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; opacity: .9; }
-    .stat-card .value { font-size: 1.55rem; font-weight: 700; margin-top: 4px; }
-    .stat-card .sub   { font-size: .78rem; opacity: .8; margin-top: 4px; }
-    .stat-blue   { background: linear-gradient(135deg, #2D11FE, #6A5CFF); }
-    .stat-green  { background: linear-gradient(135deg, #16a085, #58d0a8); }
-    .stat-orange { background: linear-gradient(135deg, #e67e22, #f39c12); }
-    .stat-red    { background: linear-gradient(135deg, #c0392b, #e74c3c); }
-    .stat-purple { background: linear-gradient(135deg, #6a1b9a, #ab47bc); }
-    .stat-teal   { background: linear-gradient(135deg, #0f766e, #14b8a6); }
-    .mini-card { background:#fff; border:1px solid #eef1f7; border-radius:12px; padding:16px; height:100%; }
-    .mini-card h6 { margin-bottom: 12px; font-weight:700; }
-</style>
+<script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 {% endblock %}
 
 {% block content %}
-<h4 class="mb-3">📊 Bảng điều khiển</h4>
+<header class="admin-page-heading">
+  <div><h4><i class="fas fa-chart-pie mr-2" style="color:#b7a2ff"></i>Tổng quan cửa hàng</h4><p>Theo dõi doanh thu, đơn hàng, người dùng và tồn kho trong một màn hình</p></div>
+  <span class="badge badge-info"><i class="fas fa-circle mr-1" style="font-size:.5rem"></i> Hệ thống quản trị</span>
+</header>
 
-<div class="row dashboard-stats">
-    <div class="col-md-4 col-lg-2 mb-3"><div class="stat-card stat-blue">
-        <div class="title">Doanh thu 24h</div>
-        <div class="value">{{ "{:,}".format(rev_1d) }}đ</div>
-        <div class="sub">{{ cnt_ord_1d }} đơn hoàn thành</div>
-    </div></div>
-    <div class="col-md-4 col-lg-2 mb-3"><div class="stat-card stat-green">
-        <div class="title">Doanh thu 7 ngày</div>
-        <div class="value">{{ "{:,}".format(rev_7d) }}đ</div>
-        <div class="sub">{{ cnt_ord_7d }} đơn</div>
-    </div></div>
-    <div class="col-md-4 col-lg-2 mb-3"><div class="stat-card stat-purple">
-        <div class="title">Doanh thu 30 ngày</div>
-        <div class="value">{{ "{:,}".format(rev_30d) }}đ</div>
-        <div class="sub">{{ cnt_ord_30d }} đơn</div>
-    </div></div>
-    <div class="col-md-4 col-lg-2 mb-3"><div class="stat-card stat-teal">
-        <div class="title">Nạp tiền 7 ngày</div>
-        <div class="value">{{ "{:,}".format(rch_7d) }}đ</div>
-        <div class="sub">{{ cnt_rch_7d }} giao dịch</div>
-    </div></div>
-    <div class="col-md-4 col-lg-2 mb-3"><div class="stat-card stat-orange">
-        <div class="title">Đơn chờ xử lý</div>
-        <div class="value">{{ pending_orders }}</div>
-        <div class="sub">cần admin duyệt tay</div>
-    </div></div>
-    <div class="col-md-4 col-lg-2 mb-3"><div class="stat-card stat-red">
-        <div class="title">Tồn kho tổng</div>
-        <div class="value">{{ total_stock }}</div>
-        <div class="sub">code chưa bán</div>
-    </div></div>
+<section class="admin-stat-grid">
+  <article class="admin-stat"><div class="label">Doanh thu 24 giờ</div><div class="number">{{ "{:,}".format(rev_1d) }}đ</div><div class="hint">{{ cnt_ord_1d }} đơn hoàn thành</div><i class="fas fa-bolt icon"></i></article>
+  <article class="admin-stat"><div class="label">Doanh thu 7 ngày</div><div class="number">{{ "{:,}".format(rev_7d) }}đ</div><div class="hint">{{ cnt_ord_7d }} đơn hàng</div><i class="fas fa-chart-line icon"></i></article>
+  <article class="admin-stat"><div class="label">Doanh thu 30 ngày</div><div class="number">{{ "{:,}".format(rev_30d) }}đ</div><div class="hint">{{ cnt_ord_30d }} đơn hàng</div><i class="fas fa-calendar-alt icon"></i></article>
+  <article class="admin-stat"><div class="label">Nạp tiền 7 ngày</div><div class="number">{{ "{:,}".format(rch_7d) }}đ</div><div class="hint">{{ cnt_rch_7d }} giao dịch</div><i class="fas fa-wallet icon"></i></article>
+  <article class="admin-stat"><div class="label">Đơn chờ xử lý</div><div class="number">{{ pending_orders }}</div><div class="hint">Cần kiểm tra</div><i class="fas fa-clock icon"></i></article>
+  <article class="admin-stat"><div class="label">Code còn trong kho</div><div class="number">{{ total_stock }}</div><div class="hint">Chưa được bán</div><i class="fas fa-boxes icon"></i></article>
+</section>
+
+<div class="row">
+ <div class="col-xl-8 mb-3"><section class="admin-panel">
+  <h6><i class="fas fa-chart-area"></i> Doanh thu & số đơn · 7 ngày gần nhất</h6>
+  <canvas id="chartRevenue" height="112" aria-label="Biểu đồ doanh thu và số đơn trong 7 ngày"></canvas>
+ </section></div>
+ <div class="col-xl-4 mb-3"><section class="admin-panel">
+  <h6><i class="fas fa-layer-group"></i> Tình hình hoạt động</h6>
+  <div class="admin-kpi-list">
+   <div class="admin-kpi-row"><span><i class="fas fa-hourglass-half mr-2" style="color:#fbbf24"></i>Chờ xử lý</span><strong>{{ status_counts.pending }}</strong></div>
+   <div class="admin-kpi-row"><span><i class="fas fa-check-circle mr-2" style="color:#34d399"></i>Hoàn thành</span><strong>{{ status_counts.completed }}</strong></div>
+   <div class="admin-kpi-row"><span><i class="fas fa-times-circle mr-2" style="color:#fb7185"></i>Đã huỷ</span><strong>{{ status_counts.cancelled }}</strong></div>
+   <div class="admin-kpi-row"><span><i class="fas fa-users mr-2" style="color:#a78bfa"></i>Tổng thành viên</span><strong>{{ total_users }}</strong></div>
+   <div class="admin-kpi-row"><span><i class="fas fa-user-plus mr-2" style="color:#60a5fa"></i>Thành viên mới · 7 ngày</span><strong>{{ new_users_7d }}</strong></div>
+   <div class="admin-kpi-row"><span><i class="fas fa-wallet mr-2" style="color:#2dd4bf"></i>Có số dư</span><strong>{{ active_users }}</strong></div>
+  </div>
+ </section></div>
 </div>
 
 <div class="row">
-    <div class="col-md-8 mb-3">
-        <div class="mini-card">
-            <h6>📈 Doanh thu & số đơn 7 ngày</h6>
-            <canvas id="chartRevenue" height="120"></canvas>
-        </div>
-    </div>
-    <div class="col-md-4 mb-3">
-        <div class="mini-card">
-            <h6>📦 Đơn theo trạng thái</h6>
-            <ul class="list-unstyled mb-0">
-                <li class="mb-2"><span class="badge badge-warning mr-2">Chờ</span> {{ status_counts.pending }}</li>
-                <li class="mb-2"><span class="badge badge-success mr-2">Hoàn thành</span> {{ status_counts.completed }}</li>
-                <li class="mb-2"><span class="badge badge-danger mr-2">Đã huỷ</span> {{ status_counts.cancelled }}</li>
-            </ul>
-            <hr>
-            <h6>👥 Người dùng</h6>
-            <div>Tổng: <b>{{ total_users }}</b> — Mới 7 ngày: <b>{{ new_users_7d }}</b></div>
-            <div>Có số dư: <b>{{ active_users }}</b></div>
-        </div>
-    </div>
+ <div class="col-lg-6 mb-3"><section class="admin-panel">
+  <h6><i class="fas fa-fire"></i> Sản phẩm bán chạy · 30 ngày</h6>
+  {% if top_products %}<div class="admin-table-wrap"><table class="table table-sm"><thead><tr><th>#</th><th>Sản phẩm</th><th class="text-right">Đơn</th><th class="text-right">Doanh thu</th></tr></thead><tbody>
+  {% for p in top_products %}<tr><td><span class="badge badge-info">{{ loop.index }}</span></td><td>{{ p.name }}</td><td class="text-right">{{ p.n }}</td><td class="text-right font-weight-bold">{{ "{:,}".format(p.rev) }}đ</td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="text-muted mb-0">Chưa có đơn hoàn thành trong 30 ngày.</p>{% endif %}
+ </section></div>
+ <div class="col-lg-6 mb-3"><section class="admin-panel">
+  <h6><i class="fas fa-tags"></i> Doanh thu theo thương hiệu · 30 ngày</h6>
+  {% if brand_rev %}<div class="admin-table-wrap"><table class="table table-sm"><thead><tr><th>Thương hiệu</th><th class="text-right">Đơn</th><th class="text-right">Doanh thu</th></tr></thead><tbody>
+  {% for b in brand_rev %}<tr><td>{{ b.label }}</td><td class="text-right">{{ b.n }}</td><td class="text-right font-weight-bold">{{ "{:,}".format(b.rev) }}đ</td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="text-muted mb-0">Chưa có dữ liệu thương hiệu.</p>{% endif %}
+ </section></div>
 </div>
 
-<div class="row">
-    <div class="col-md-6 mb-3">
-        <div class="mini-card">
-            <h6>🔥 Top sản phẩm bán chạy (30 ngày)</h6>
-            {% if top_products %}
-            <table class="table table-sm mb-0">
-                <thead><tr><th>#</th><th>Tên</th><th class="text-right">Đơn</th><th class="text-right">Doanh thu</th></tr></thead>
-                <tbody>
-                {% for p in top_products %}
-                    <tr>
-                        <td>{{ loop.index }}</td>
-                        <td>{{ p.name }}</td>
-                        <td class="text-right">{{ p.n }}</td>
-                        <td class="text-right">{{ "{:,}".format(p.rev) }}đ</td>
-                    </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-            {% else %}<p class="text-muted mb-0">Chưa có đơn nào trong 30 ngày.</p>{% endif %}
-        </div>
-    </div>
-    <div class="col-md-6 mb-3">
-        <div class="mini-card">
-            <h6>🏷️ Doanh thu theo brand (30 ngày)</h6>
-            {% if brand_rev %}
-            <table class="table table-sm mb-0">
-                <thead><tr><th>Brand</th><th class="text-right">Đơn</th><th class="text-right">Doanh thu</th></tr></thead>
-                <tbody>
-                {% for b in brand_rev %}
-                    <tr><td>{{ b.label }}</td><td class="text-right">{{ b.n }}</td><td class="text-right">{{ "{:,}".format(b.rev) }}đ</td></tr>
-                {% endfor %}
-                </tbody>
-            </table>
-            {% else %}<p class="text-muted mb-0">Chưa có đơn nào trong 30 ngày.</p>{% endif %}
-        </div>
-    </div>
-</div>
-
-<div class="row">
-    <div class="col-12 mb-3">
-        <div class="mini-card">
-            <h6>⚠️ Cảnh báo tồn kho thấp (≤ {{ low_thr }} code)</h6>
-            {% if low_stock_products %}
-            <table class="table table-sm mb-0">
-                <thead><tr><th>Sản phẩm</th><th>Brand</th><th class="text-right">Còn</th><th>Thao tác</th></tr></thead>
-                <tbody>
-                {% for p in low_stock_products %}
-                    <tr>
-                        <td>{{ p.name }}</td>
-                        <td>{{ brands.get(p.brand, p.brand) }}</td>
-                        <td class="text-right {% if p.stock_count == 0 %}text-danger font-weight-bold{% endif %}">{{ p.stock_count }}</td>
-                        <td><a href="{{ url_for('admin_stock', pid=p._id) }}" class="btn btn-sm btn-outline-primary">Nhập thêm code</a></td>
-                    </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-            {% else %}<p class="text-muted mb-0">🎉 Tất cả sản phẩm auto đều đủ kho.</p>{% endif %}
-        </div>
-    </div>
-</div>
+<section class="admin-panel mb-3">
+ <h6><i class="fas fa-exclamation-triangle"></i> Cảnh báo tồn kho thấp <span class="badge badge-warning ml-1">≤ {{ low_thr }} code</span></h6>
+ {% if low_stock_products %}<div class="admin-table-wrap"><table class="table table-sm"><thead><tr><th>Sản phẩm</th><th>Thương hiệu</th><th class="text-right">Còn lại</th><th class="text-right">Thao tác</th></tr></thead><tbody>
+ {% for p in low_stock_products %}<tr><td class="font-weight-bold">{{ p.name }}</td><td>{{ brands.get(p.brand, p.brand) }}</td><td class="text-right {% if p.stock_count == 0 %}text-danger font-weight-bold{% endif %}">{{ p.stock_count }}</td><td class="text-right"><a href="{{ url_for('admin_stock', pid=p._id) }}" class="btn btn-sm btn-outline-primary"><i class="fas fa-plus mr-1"></i>Nhập code</a></td></tr>{% endfor %}
+ </tbody></table></div>{% else %}<p class="text-muted mb-0"><i class="fas fa-check-circle mr-1 text-success"></i>Tất cả sản phẩm tự động đều đủ kho.</p>{% endif %}
+</section>
 
 <script>
-Chart.defaults.color = '#c9c3e8';
-Chart.defaults.borderColor = 'rgba(167,139,250,.16)';
-new Chart(document.getElementById('chartRevenue'), {
+window.addEventListener('DOMContentLoaded', function () {
+  var canvas = document.getElementById('chartRevenue');
+  if (!canvas || typeof Chart === 'undefined') return;
+  Chart.defaults.color = '#c9c3e8';
+  Chart.defaults.borderColor = 'rgba(167,139,250,.13)';
+  new Chart(canvas, {
     type: 'bar',
-    data: {
-        labels: {{ chart_labels|tojson }},
-        datasets: [
-            {
-                type: 'bar', label: 'Doanh thu (đ)',
-                data: {{ chart_rev|tojson }},
-                backgroundColor: 'rgba(45,17,254,.6)', yAxisID: 'y'
-            },
-            {
-                type: 'line', label: 'Số đơn',
-                data: {{ chart_cnt|tojson }},
-                borderColor: '#e67e22', backgroundColor: 'rgba(230,126,34,.15)',
-                yAxisID: 'y1', tension: .25
-            }
-        ]
-    },
-    options: {
-        responsive: true,
-        animation: { duration: 850, easing: 'easeOutQuart' },
-        interaction: { intersect: false, mode: 'index' },
-        scales: {
-            y:  { position: 'left',  beginAtZero: true, title: { display: true, text: 'VNĐ' } },
-            y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false },
-                  title: { display: true, text: 'Đơn' } }
-        }
-    }
+    data: {labels: {{ chart_labels|tojson }}, datasets: [
+      {type:'bar',label:'Doanh thu (đ)',data:{{ chart_rev|tojson }},backgroundColor:'rgba(139,92,246,.48)',borderColor:'#9b7cff',borderWidth:1,borderRadius:7,yAxisID:'y'},
+      {type:'line',label:'Số đơn',data:{{ chart_cnt|tojson }},borderColor:'#42d6bd',backgroundColor:'rgba(66,214,189,.12)',pointBackgroundColor:'#42d6bd',pointRadius:3,tension:.35,yAxisID:'y1'}
+    ]},
+    options:{responsive:true,maintainAspectRatio:true,animation:{duration:450},interaction:{intersect:false,mode:'index'},
+      plugins:{legend:{labels:{usePointStyle:true,boxWidth:8,padding:18}},tooltip:{backgroundColor:'#17152f',borderColor:'rgba(167,139,250,.3)',borderWidth:1,padding:12}},
+      scales:{x:{grid:{display:false}},y:{beginAtZero:true,ticks:{maxTicksLimit:5}},y1:{position:'right',beginAtZero:true,grid:{drawOnChartArea:false},ticks:{precision:0,maxTicksLimit:5}}}}
+  });
 });
 </script>
-
 {% endblock %}
