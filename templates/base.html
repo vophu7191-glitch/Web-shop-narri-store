@@ -126,8 +126,13 @@
         </a>
         <button type="button" class="narri-sidebar-close" onclick="NarriLayout.closeSidebar()" aria-label="Đóng menu">×</button>
       </div>
+      <div class="narri-sidebar-search">
+        <i class="fas fa-search" aria-hidden="true"></i>
+        <input id="narriNavSearch" type="search" placeholder="Tìm trong menu..." autocomplete="off" aria-label="Tìm mục điều hướng">
+        <kbd>/</kbd>
+      </div>
       <div class="narri-sidebar-profile">
-        <span class="narri-sidebar-eyebrow">{% if current_user and current_user.role == 'admin' %}ADMIN WORKSPACE{% else %}WELCOME BACK{% endif %}</span>
+        <span class="narri-sidebar-eyebrow">{% if current_user and current_user.role == 'admin' %}ADMIN WORKSPACE{% elif current_user %}TÀI KHOẢN CỦA BẠN{% else %}CHÀO MỪNG BẠN{% endif %}</span>
         <div class="narri-sidebar-balance"><i class="fas fa-wallet"></i>{% if current_user %}{{ "{:,}".format(current_user.balance) }}đ{% else %}0đ{% endif %}</div>
       </div>
       <div class="data-scrollbar narri-sidebar-scroll" data-scroll="1">
@@ -171,15 +176,17 @@
           <li class="sidebar-layout"><a href="{{ url_for('admin_settings') }}" class="svg-icon"><i class="fas fa-sliders-h"></i><span>Cấu hình & API Keys</span></a></li>
           <li class="sidebar-layout"><a href="{{ url_for('admin_backup') }}" class="svg-icon"><i class="fas fa-database"></i><span>Backup / Restore</span></a></li>
           {% endif %}
-          <li class="narri-nav-heading">TÀI KHOẢN</li>
-          {% if current_user %}
-          <li class="sidebar-layout"><a href="#" class="svg-icon"><i class="fas fa-user-circle"></i><span>{{ current_user.username }}</span></a></li>
-          <li class="sidebar-layout"><a href="{{ url_for('logout') }}" class="svg-icon"><i class="fas fa-sign-out-alt"></i><span>Đăng xuất</span></a></li>
-          {% else %}
-          <li class="sidebar-layout"><a href="{{ url_for('login') }}" class="svg-icon"><i class="fas fa-sign-in-alt"></i><span>Đăng nhập</span></a></li>
-          <li class="sidebar-layout"><a href="{{ url_for('register') }}" class="svg-icon"><i class="fas fa-user-plus"></i><span>Đăng ký</span></a></li>
-          {% endif %}
+
         </ul></nav>
+      </div>
+      <div class="narri-sidebar-footer">
+        {% if current_user %}
+        <div class="narri-account-avatar">{{ current_user.username[:1]|upper }}</div>
+        <div class="narri-account-meta"><strong>{{ current_user.username }}</strong><span>{% if current_user.role == 'admin' %}Quản trị viên{% else %}Thành viên{% endif %}</span></div>
+        <a href="{{ url_for('logout') }}" class="narri-account-action" aria-label="Đăng xuất" title="Đăng xuất"><i class="fas fa-sign-out-alt"></i></a>
+        {% else %}
+        <a href="{{ url_for('login') }}" class="narri-login-link"><i class="fas fa-sign-in-alt"></i> Đăng nhập / Đăng ký</a>
+        {% endif %}
       </div>
     </aside>
 
