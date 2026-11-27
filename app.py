@@ -21,7 +21,7 @@ from pymongo import MongoClient, ReturnDocument
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
-from gachthefast_logic import calculate_credit as _calculate_gachthefast_credit, claim_pending_topup
+from gachthefast_logic import calculate_credit as _calculate_gachthefast_credit, claim_pending_topup, credit_user_once
 
 # 2FA (TOTP) + QR code — optional but recommended
 try:
@@ -1275,23 +1275,10 @@ def _gachthefast_callback_impl():
         # Nếu process chết sau khi cộng ví nhưng trước khi ghi lịch sử, callback retry
         # sẽ bỏ qua $inc, hoàn tất upsert lịch sử rồi mới đánh dấu đơn success.
         topup_key = str(topup["_id"])
-        credit_result = col_users.update_one(
-            {"_id": topup["user_id"], "processed_card_topup_ids": {"$ne": topup_key}},
-            {"$inc": {"balance": credited_amount},
-             "$addToSet": {"processed_card_topup_ids": topup_key}},
+        credited_now, credit_confirmed = credit_user_once(
+            col_users, topup["user_id"], topup_key, credited_amount
         )
-        credited_now = credit_result.modified_count == 1
-        user_after = col_users.find_one(
-            {"_id": topup["user_id"]},
-            {"processed_card_topup_ids": 1, "username": 1},
-        )
-        if not user_after:
-            col_card_topups.update_one({"_id": topup["_id"], "status": "processing"}, {"$set": {
-                "status": "review", "review_reason": "topup_user_not_found",
-                "updated_at": datetime.now(timezone.utc),
-            }})
-            return jsonify({"status": "review"}), 200
-        if topup_key not in (user_after.get("processed_card_topup_ids") or []):
+        if not credit_confirmed:
             col_card_topups.update_one({"_id": topup["_id"], "status": "processing"}, {"$set": {
                 "status": "review", "review_reason": "wallet_credit_not_confirmed",
                 "updated_at": datetime.now(timezone.utc),
