@@ -106,6 +106,7 @@ class CallbackHarness:
         self.relayed = []
         self.successes = []
         self.failures = []
+        self.reviews = []
         self._ids = 0
 
     def new_id(self):
@@ -129,6 +130,7 @@ class CallbackHarness:
             relay=self.relayed.append,
             on_success=lambda *args: self.successes.append(args),
             on_failed=lambda *args: self.failures.append(args),
+            on_review=lambda *args: self.reviews.append(args),
         )
 
     @property
@@ -280,6 +282,24 @@ class CallbackFlowTests(unittest.TestCase):
         self.assertEqual(body, {"status": "review"})
         self.assertEqual(h.topup["review_reason"], "gachthefast_payout_below_customer_credit")
         self.assertEqual(h.balance, 0)
+
+    def test_review_transition_emits_one_manual_review_event(self):
+        h = CallbackHarness()
+        body, _ = h.call(h.payload(amount=7_000))
+        self.assertEqual(body, {"status": "review"})
+        self.assertEqual(len(h.reviews), 1)
+        topup, reason, details = h.reviews[0]
+        self.assertEqual(topup["request_id"], "req-1")
+        self.assertEqual(reason, "gachthefast_payout_below_customer_credit")
+        self.assertEqual(details["shop_margin"], -700)
+        # A repeated callback cannot create another review notification.
+        h.call(h.payload(amount=7_000))
+        self.assertEqual(len(h.reviews), 1)
+
+    def test_successful_callback_does_not_emit_manual_review_event(self):
+        h = CallbackHarness()
+        h.call(h.payload())
+        self.assertEqual(h.reviews, [])
 
     def test_status_99_never_claims_or_credits(self):
         h = CallbackHarness()
