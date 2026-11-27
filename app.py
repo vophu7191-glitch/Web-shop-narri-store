@@ -21,6 +21,7 @@ from pymongo import MongoClient, ReturnDocument
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
+from gachthefast_logic import calculate_credit as _calculate_gachthefast_credit, claim_pending_topup
 
 # 2FA (TOTP) + QR code — optional but recommended
 try:
@@ -1163,26 +1164,11 @@ def _safe_int(v):
             return 0
 
 
-def _calculate_gachthefast_credit(face_value, target_discount_pct, gtf_amount):
-    """Return customer credit and shop margin from face value and GTF net payout."""
-    face_value = _safe_int(face_value)
-    gtf_amount = _safe_int(gtf_amount)
-    target_discount_pct = float(target_discount_pct)
-    if face_value <= 0 or not (0 <= target_discount_pct < 100):
-        raise ValueError("invalid_face_value_or_target_discount")
-    credited_amount = round(face_value * (100 - target_discount_pct) / 100)
-    return credited_amount, gtf_amount - credited_amount
-
-
-def _claim_gachthefast_topup(topup_id, collection=None):
+def _claim_gachthefast_topup(topup_id):
     """Atomically let only one callback move a top-up from pending to processing."""
-    if collection is None:
-        collection = col_card_topups
-    result = collection.update_one(
-        {"_id": topup_id, "status": "pending"},
-        {"$set": {"status": "processing", "processing_started_at": datetime.now(timezone.utc)}},
+    return claim_pending_topup(
+        col_card_topups, topup_id, datetime.now(timezone.utc)
     )
-    return result.matched_count == 1
 
 
 def _gachthefast_callback_impl():
