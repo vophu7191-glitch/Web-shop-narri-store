@@ -1201,14 +1201,6 @@ def _on_gachthefast_review(topup, reason, details):
     margin = details.get("shop_margin", topup.get("shop_margin"))
     discount = details.get("target_discount_pct", topup.get("target_discount_pct"))
     event_id = f"narri-gachthefast-review:{topup.get('_id')}:{reason}"[:128]
-    try:
-        col_card_topups.update_one(
-            {"_id": topup.get("_id"), "review_alerted_at": {"$exists": False}},
-            {"$set": {"review_alerted_at": datetime.now(timezone.utc)}},
-        )
-    except Exception as exc:
-        print(f"[gachthefast][review] Không đánh dấu được cảnh báo: {exc}")
-
     message = (
         f"{username} — {telco} — mã {request_id or 'N/A'} cần đối soát thủ công "
         f"(lý do: {reason})."
@@ -1245,28 +1237,24 @@ def _on_gachthefast_review(topup, reason, details):
         "target_discount_pct": discount,
     }
     try:
-        col_card_topups.update_one(
-            {"_id": topup.get("_id")},
-            {"$setOnInsert": {"review_delivery": {
-                "event_id": event_id,
-                "status": "pending",
-                "payload": payload,
-                "attempts": 0,
-                "created_at": datetime.now(timezone.utc),
-            }}},
-        )
-        # Existing review records created before the outbox was introduced are
-        # upgraded without resetting an already delivered event.
-        col_card_topups.update_one(
+        created_at = datetime.now(timezone.utc)
+        stored = col_card_topups.update_one(
             {"_id": topup.get("_id"), "review_delivery": {"$exists": False}},
-            {"$set": {"review_delivery": {
-                "event_id": event_id,
-                "status": "pending",
-                "payload": payload,
-                "attempts": 0,
-                "created_at": datetime.now(timezone.utc),
-            }}},
+            {"$set": {
+                "review_alerted_at": created_at,
+                "review_reason": reason,
+                "review_delivery": {
+                    "event_id": event_id,
+                    "status": "pending",
+                    "payload": payload,
+                    "attempts": 0,
+                    "created_at": created_at,
+                },
+            }},
         )
+        if stored.modified_count != 1:
+            # A concurrent callback/monitor already created this event.
+            return
     except Exception as exc:
         print(f"[gachthefast][review] Không lưu được outbox event {event_id}: {exc}")
         return
@@ -3423,29 +3411,21 @@ def _stale_gachthefast_settlement_monitor():
             stale = col_card_topups.find({
                 "status": "settling",
                 "settling_started_at": {"$lte": cutoff},
-                "review_alerted_at": {"$exists": False},
+                "review_delivery": {"$exists": False},
             }).limit(100)
             for topup in stale:
                 settlement_result = topup.get("settlement_result") or {}
-                claimed = col_card_topups.update_one(
-                    {"_id": topup["_id"], "status": "settling", "review_alerted_at": {"$exists": False}},
-                    {"$set": {
-                        "review_alerted_at": datetime.now(timezone.utc),
-                        "review_reason": "settlement_stale_manual_reconciliation",
-                    }},
+                _on_gachthefast_review(
+                    topup,
+                    "settlement_stale_manual_reconciliation",
+                    {
+                        "face_value": topup.get("face_value", topup.get("value", settlement_result.get("value"))),
+                        "gachthefast_amount": topup.get("gachthefast_amount", settlement_result.get("amount")),
+                        "credited_amount": topup.get("credited_amount"),
+                        "shop_margin": topup.get("shop_margin"),
+                        "target_discount_pct": topup.get("target_discount_pct"),
+                    },
                 )
-                if claimed.modified_count == 1:
-                    _on_gachthefast_review(
-                        topup,
-                        "settlement_stale_manual_reconciliation",
-                        {
-                            "face_value": topup.get("face_value", topup.get("value", settlement_result.get("value"))),
-                            "gachthefast_amount": topup.get("gachthefast_amount", settlement_result.get("amount")),
-                            "credited_amount": topup.get("credited_amount"),
-                            "shop_margin": topup.get("shop_margin"),
-                            "target_discount_pct": topup.get("target_discount_pct"),
-                        },
-                    )
 
             # Retry pending events and expired leases after process restarts.
             pending = col_card_topups.find({
