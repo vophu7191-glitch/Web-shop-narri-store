@@ -1205,22 +1205,6 @@ def _on_gachthefast_review(topup, reason, details):
         f"{username} — {telco} — mã {request_id or 'N/A'} cần đối soát thủ công "
         f"(lý do: {reason})."
     )
-    try:
-        notify_admins(
-            kind="card_topup_review",
-            title="⚠️ Nạp thẻ GachTheFast cần đối soát",
-            message=message,
-            url="/admin/recharges",
-            meta={
-                "event_id": event_id, "topup_id": str(topup.get("_id") or ""),
-                "request_id": request_id, "reason": reason, "status": "review",
-                "face_value": face_value, "gachthefast_amount": gtf_amount,
-                "credited_amount": credited, "shop_margin": margin,
-            },
-        )
-    except Exception as exc:
-        print(f"[gachthefast][review] Không lưu được thông báo admin: {exc}")
-
     # Lưu payload vào Mongo trước khi gửi. Monitor sẽ tiếp tục thử lại sau restart.
     # Không lưu/gửi code hoặc serial thẻ sang Discord.
     payload = {
@@ -1255,6 +1239,22 @@ def _on_gachthefast_review(topup, reason, details):
         if stored.modified_count != 1:
             # A concurrent callback/monitor already created this event.
             return
+    try:
+        notify_admins(
+            kind="card_topup_review",
+            title="⚠️ Nạp thẻ GachTheFast cần đối soát",
+            message=message,
+            url="/admin/recharges",
+            meta={
+                "event_id": event_id, "topup_id": str(topup.get("_id") or ""),
+                "request_id": request_id, "reason": reason, "status": "review",
+                "face_value": face_value, "gachthefast_amount": gtf_amount,
+                "credited_amount": credited, "shop_margin": margin,
+            },
+        )
+    except Exception as exc:
+        print(f"[gachthefast][review] Không lưu được thông báo admin: {exc}")
+
     except Exception as exc:
         print(f"[gachthefast][review] Không lưu được outbox event {event_id}: {exc}")
         return
@@ -3421,6 +3421,25 @@ def _stale_gachthefast_settlement_monitor():
                     {
                         "face_value": topup.get("face_value", topup.get("value", settlement_result.get("value"))),
                         "gachthefast_amount": topup.get("gachthefast_amount", settlement_result.get("amount")),
+                        "credited_amount": topup.get("credited_amount"),
+                        "shop_margin": topup.get("shop_margin"),
+                        "target_discount_pct": topup.get("target_discount_pct"),
+                    },
+                )
+
+            # Recover review rows whose process stopped after the callback state
+            # transition but before the durable outbox was created.
+            unqueued_reviews = col_card_topups.find({
+                "status": "review",
+                "review_delivery": {"$exists": False},
+            }).limit(50)
+            for topup in unqueued_reviews:
+                reason = topup.get("review_reason") or "manual_reconciliation_required"
+                _on_gachthefast_review(
+                    topup, reason,
+                    {
+                        "face_value": topup.get("face_value", topup.get("value")),
+                        "gachthefast_amount": topup.get("gachthefast_amount"),
                         "credited_amount": topup.get("credited_amount"),
                         "shop_margin": topup.get("shop_margin"),
                         "target_discount_pct": topup.get("target_discount_pct"),
