@@ -1201,6 +1201,13 @@ def _on_gachthefast_review(topup, reason, details):
     margin = details.get("shop_margin", topup.get("shop_margin"))
     discount = details.get("target_discount_pct", topup.get("target_discount_pct"))
     event_id = f"narri-gachthefast-review:{topup.get('_id')}:{reason}"[:128]
+    try:
+        col_card_topups.update_one(
+            {"_id": topup.get("_id"), "review_alerted_at": {"$exists": False}},
+            {"$set": {"review_alerted_at": datetime.now(timezone.utc)}},
+        )
+    except Exception as exc:
+        print(f"[gachthefast][review] Không đánh dấu được cảnh báo: {exc}")
 
     message = (
         f"{username} — {telco} — mã {request_id or 'N/A'} cần đối soát thủ công "
@@ -1242,7 +1249,6 @@ def _on_gachthefast_review(topup, reason, details):
         "credited_amount": credited,
         "shop_margin": margin,
         "target_discount_pct": discount,
-        "admin_url": url_for("admin_recharges", _external=True),
     }
 
     def deliver():
@@ -1256,11 +1262,16 @@ def _on_gachthefast_review(topup, reason, details):
             },
             method="POST",
         )
-        try:
-            with urllib.request.urlopen(req, timeout=8) as response:
-                print(f"[gachthefast][review] Discord bot accepted event {event_id}: HTTP {response.status}")
-        except Exception as exc:
-            print(f"[gachthefast][review] Gửi cảnh báo Discord thất bại ({event_id}): {exc}")
+        for attempt in range(3):
+            try:
+                with urllib.request.urlopen(req, timeout=8) as response:
+                    response_body = response.read(1000).decode("utf-8", errors="replace")
+                    print(f"[gachthefast][review] Bot phản hồi event {event_id}: HTTP {response.status} {response_body}")
+                    return
+            except Exception as exc:
+                print(f"[gachthefast][review] Lần gửi {attempt + 1}/3 thất bại ({event_id}): {exc}")
+                if attempt < 2:
+                    time.sleep(attempt + 1)
 
     threading.Thread(target=deliver, name="narri-review-alert", daemon=True).start()
 
@@ -1281,9 +1292,22 @@ def gachthefast_callback():
             record_gachthefast_processing_error(
                 col_card_topups, callback_request_id, exc, datetime.now(timezone.utc)
             )
+            current = col_card_topups.find_one({"request_id": callback_request_id}) if callback_request_id else None
+            if current and current.get("status") == "settling":
+                _on_gachthefast_review(
+                    current,
+                    "settlement_interrupted_manual_reconciliation",
+                    {
+                        "face_value": current.get("face_value", current.get("value")),
+                        "gachthefast_amount": current.get("gachthefast_amount"),
+                        "credited_amount": current.get("credited_amount"),
+                        "shop_margin": current.get("shop_margin"),
+                        "target_discount_pct": current.get("target_discount_pct"),
+                    },
+                )
         except Exception:
             traceback.print_exc()
-        return jsonify({"status": "error"}), 200  # trả 200 để gachthefast không retry loạn
+        return jsonify({"status": "error"}), 200  # giữ nguyên response provider
 
 
 def _gachthefast_callback_impl():
@@ -3301,8 +3325,48 @@ def admin_notifications_mark_read():
     return jsonify({"ok": True})
 
 
+def _stale_gachthefast_settlement_monitor():
+    """Cảnh báo Discord nếu một giao dịch mắc ở settling quá 5 phút."""
+    while True:
+        try:
+            cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
+            stale = col_card_topups.find({
+                "status": "settling",
+                "settling_started_at": {"$lte": cutoff},
+                "review_alerted_at": {"$exists": False},
+            }).limit(100)
+            for topup in stale:
+                claimed = col_card_topups.update_one(
+                    {"_id": topup["_id"], "status": "settling", "review_alerted_at": {"$exists": False}},
+                    {"$set": {
+                        "review_alerted_at": datetime.now(timezone.utc),
+                        "review_reason": "settlement_stale_manual_reconciliation",
+                    }},
+                )
+                if claimed.modified_count == 1:
+                    _on_gachthefast_review(
+                        topup,
+                        "settlement_stale_manual_reconciliation",
+                        {
+                            "face_value": topup.get("face_value", topup.get("value")),
+                            "gachthefast_amount": topup.get("gachthefast_amount"),
+                            "credited_amount": topup.get("credited_amount"),
+                            "shop_margin": topup.get("shop_margin"),
+                            "target_discount_pct": topup.get("target_discount_pct"),
+                        },
+                    )
+        except Exception as exc:
+            print(f"[gachthefast][review-monitor] {exc}")
+        time.sleep(60)
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     from waitress import serve
+    threading.Thread(
+        target=_stale_gachthefast_settlement_monitor,
+        name="gachthefast-review-monitor",
+        daemon=True,
+    ).start()
     print(f"🚀 Chạy production server (waitress) tại cổng {port}")
     serve(app, host="0.0.0.0", port=port)
