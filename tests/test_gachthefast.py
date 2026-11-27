@@ -1,9 +1,6 @@
 import unittest
 
-from app import (
-    _calculate_gachthefast_credit,
-    _claim_gachthefast_topup,
-)
+from gachthefast_logic import calculate_credit, claim_pending_topup
 
 
 class FakeUpdateResult:
@@ -34,7 +31,7 @@ class GachTheFastCreditTests(unittest.TestCase):
         ]
         for face_value, gtf_amount, expected_credit, expected_margin in cases:
             with self.subTest(face_value=face_value):
-                credit, margin = _calculate_gachthefast_credit(
+                credit, margin = calculate_credit(
                     face_value, 23, gtf_amount
                 )
                 self.assertEqual(credit, expected_credit)
@@ -59,7 +56,7 @@ class GachTheFastCreditTests(unittest.TestCase):
 
     def test_only_first_callback_can_claim_pending_topup(self):
         collection = FakeTopupCollection()
-        first = _claim_gachthefast_topup("topup-1", collection)
+        first = claim_pending_topup(collection, "topup-1", "now")
         second = _claim_gachthefast_topup("topup-1", collection)
         self.assertTrue(first)
         self.assertFalse(second)
