@@ -1191,7 +1191,7 @@ def _on_gachthefast_failed(topup, status, message):
 
 
 def _on_gachthefast_review(topup, reason, details):
-    """Lưu cảnh báo trong admin website và gửi event riêng sang Discord bot."""
+    """Persist a manual-review event before any best-effort notification."""
     username = str(topup.get("username") or "Không rõ")
     request_id = str(topup.get("request_id") or "")
     telco = str(topup.get("telco") or "Không rõ")
@@ -1201,12 +1201,6 @@ def _on_gachthefast_review(topup, reason, details):
     margin = details.get("shop_margin", topup.get("shop_margin"))
     discount = details.get("target_discount_pct", topup.get("target_discount_pct"))
     event_id = f"narri-gachthefast-review:{topup.get('_id')}:{reason}"[:128]
-    message = (
-        f"{username} — {telco} — mã {request_id or 'N/A'} cần đối soát thủ công "
-        f"(lý do: {reason})."
-    )
-    # Lưu payload vào Mongo trước khi gửi. Monitor sẽ tiếp tục thử lại sau restart.
-    # Không lưu/gửi code hoặc serial thẻ sang Discord.
     payload = {
         "event_id": event_id,
         "request_id": request_id,
@@ -1220,6 +1214,9 @@ def _on_gachthefast_review(topup, reason, details):
         "shop_margin": margin,
         "target_discount_pct": discount,
     }
+
+    # Atomic event creation closes the crash window between marking review
+    # and recording the Discord delivery job.
     try:
         created_at = datetime.now(timezone.utc)
         stored = col_card_topups.update_one(
@@ -1237,8 +1234,15 @@ def _on_gachthefast_review(topup, reason, details):
             }},
         )
         if stored.modified_count != 1:
-            # A concurrent callback/monitor already created this event.
             return
+    except Exception as exc:
+        print(f"[gachthefast][review] Không lưu được outbox event {event_id}: {exc}")
+        return
+
+    message = (
+        f"{username} — {telco} — mã {request_id or 'N/A'} cần đối soát thủ công "
+        f"(lý do: {reason})."
+    )
     try:
         notify_admins(
             kind="card_topup_review",
@@ -1254,10 +1258,6 @@ def _on_gachthefast_review(topup, reason, details):
         )
     except Exception as exc:
         print(f"[gachthefast][review] Không lưu được thông báo admin: {exc}")
-
-    except Exception as exc:
-        print(f"[gachthefast][review] Không lưu được outbox event {event_id}: {exc}")
-        return
 
     webhook_url = os.environ.get("NARRI_REVIEW_WEBHOOK_URL", "").strip()
     webhook_secret = os.environ.get("NARRI_REVIEW_WEBHOOK_SECRET", "").strip()
