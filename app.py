@@ -1221,6 +1221,15 @@ def _gachthefast_callback_impl():
     amount_credit = _safe_int(data.get("amount", 0))
     real_value = data.get("value")
 
+    if status in ("1", "2") and amount_credit <= 0:
+        col_card_topups.update_one({"_id": topup["_id"], "status": "processing"}, {"$set": {
+            "status": "review", "value": real_value, "gachthefast_amount": amount_credit,
+            "gachthefast_status": status,
+            "review_reason": "successful_callback_missing_positive_payout",
+            "updated_at": datetime.now(timezone.utc),
+        }})
+        return jsonify({"status": "review"}), 200
+
     if status in ("1", "2") and amount_credit > 0:
         cfg_discount = get_config().get("gachthefast_discount", {}) or {}
         target_discount_pct = float(cfg_discount.get(topup["telco"].lower(), 0) or 0)
