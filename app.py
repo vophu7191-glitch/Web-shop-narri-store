@@ -1032,6 +1032,8 @@ def sepay_webhook():
 col_card_topups = db["card_topups"]
 col_card_topups.create_index([("created_at", -1)])
 col_card_topups.create_index("request_id", unique=True)
+# Một top-up chỉ tạo tối đa một dòng lịch sử nạp, kể cả callback được gửi lại.
+col_recharges.create_index("source_topup_id", unique=True, sparse=True)
 
 
 # Danh mục loại thẻ gachthefast.com hỗ trợ (đồng bộ với mapping đã xác nhận bên bot Discord).
@@ -1220,10 +1222,13 @@ def _gachthefast_callback_impl():
         # Thẻ vẫn đang xử lý; không claim để callback kết quả cuối có thể tiếp tục.
         return jsonify({"status": "pending"}), 200
 
-    # Không dựa vào lần find_one ở trên để chống race: điều kiện status=pending
-    # được kiểm tra nguyên tử trong MongoDB, chỉ một callback claim thành công.
+    # Claim lần đầu bằng compare-and-set. Nếu tiến trình trước bị dừng giữa chừng,
+    # cho phép callback tiếp theo tiếp tục đơn processing; phần cộng ví phía dưới
+    # có idempotency key riêng nên không thể cộng lần hai.
     if not _claim_gachthefast_topup(topup["_id"]):
-        return jsonify({"status": "already_processed"}), 200
+        topup = col_card_topups.find_one({"_id": topup["_id"]}) or topup
+        if topup.get("status") != "processing":
+            return jsonify({"status": "already_processed"}), 200
 
     amount_credit = _safe_int(data.get("amount", 0))
     real_value = data.get("value")
@@ -1266,31 +1271,63 @@ def _gachthefast_callback_impl():
             }})
             return jsonify({"status": "review"}), 200
 
-        # Chỉ callback đã claim được đơn mới tới đây; callback trùng không thể cộng ví lần hai.
-        col_users.update_one({"_id": topup["user_id"]}, {"$inc": {"balance": credited_amount}})
-        col_recharges.insert_one({
-            "_id": uuid.uuid4().hex[:12],
-            "user_id": topup["user_id"], "username": topup["username"],
-            "amount": credited_amount, "bank": f"Thẻ cào {topup['telco']}",
-            "source": "gachthefast", "created_at": datetime.now(timezone.utc),
-        })
+        # Cộng ví đúng một lần bằng idempotency key lưu ngay trên document user.
+        # Nếu process chết sau khi cộng ví nhưng trước khi ghi lịch sử, callback retry
+        # sẽ bỏ qua $inc, hoàn tất upsert lịch sử rồi mới đánh dấu đơn success.
+        topup_key = str(topup["_id"])
+        credit_result = col_users.update_one(
+            {"_id": topup["user_id"], "processed_card_topup_ids": {"$ne": topup_key}},
+            {"$inc": {"balance": credited_amount},
+             "$addToSet": {"processed_card_topup_ids": topup_key}},
+        )
+        credited_now = credit_result.modified_count == 1
+        user_after = col_users.find_one(
+            {"_id": topup["user_id"]},
+            {"processed_card_topup_ids": 1, "username": 1},
+        )
+        if not user_after:
+            col_card_topups.update_one({"_id": topup["_id"], "status": "processing"}, {"$set": {
+                "status": "review", "review_reason": "topup_user_not_found",
+                "updated_at": datetime.now(timezone.utc),
+            }})
+            return jsonify({"status": "review"}), 200
+        if topup_key not in (user_after.get("processed_card_topup_ids") or []):
+            col_card_topups.update_one({"_id": topup["_id"], "status": "processing"}, {"$set": {
+                "status": "review", "review_reason": "wallet_credit_not_confirmed",
+                "updated_at": datetime.now(timezone.utc),
+            }})
+            return jsonify({"status": "review"}), 200
+
+        # Upsert lịch sử theo mã top-up duy nhất, không insert một dòng mới mỗi lần retry.
+        col_recharges.update_one(
+            {"source_topup_id": topup_key},
+            {"$setOnInsert": {
+                "_id": uuid.uuid4().hex[:12],
+                "source_topup_id": topup_key,
+                "user_id": topup["user_id"], "username": topup["username"],
+                "amount": credited_amount, "bank": f"Thẻ cào {topup['telco']}",
+                "source": "gachthefast", "created_at": datetime.now(timezone.utc),
+            }},
+            upsert=True,
+        )
         col_card_topups.update_one({"_id": topup["_id"], "status": "processing"}, {"$set": {
             "status": "success", "value": real_value, "face_value": face_value,
             "credited_amount": credited_amount, "gachthefast_amount": amount_credit,
             "target_discount_pct": target_discount_pct, "shop_margin": shop_margin,
             "trans_id": data.get("trans_id"), "updated_at": datetime.now(timezone.utc),
         }})
-        note = "đúng mệnh giá" if status == "1" else "SAI mệnh giá, cộng theo mệnh giá thực tế"
-        log_activity(topup["user_id"], topup["username"],
-                     f"Nạp thẻ cào {topup['telco']} thành công ({note}, chiết khấu khách {target_discount_pct:g}%) +{credited_amount:,}đ")
-        cfg = get_config()
-        if cfg.get("referral_on_recharge"):
-            _award_referral_commission(topup["user_id"], credited_amount, f"nạp thẻ {topup['telco']}")
-        notify_admins(
-            kind="recharge", title="💳 Nạp thẻ cào thành công",
-            message=f"{topup['username']} nạp thẻ {topup['telco']} +{credited_amount:,}đ" + ("" if status == "1" else " (sai mệnh giá)"),
-            url=url_for("admin_recharges"), meta={"user_id": topup["user_id"], "amount": credited_amount},
-        )
+        if credited_now:
+            note = "đúng mệnh giá" if status == "1" else "SAI mệnh giá, cộng theo mệnh giá thực tế"
+            log_activity(topup["user_id"], topup["username"],
+                         f"Nạp thẻ cào {topup['telco']} thành công ({note}, chiết khấu khách {target_discount_pct:g}%) +{credited_amount:,}đ")
+            cfg = get_config()
+            if cfg.get("referral_on_recharge"):
+                _award_referral_commission(topup["user_id"], credited_amount, f"nạp thẻ {topup['telco']}")
+            notify_admins(
+                kind="recharge", title="💳 Nạp thẻ cào thành công",
+                message=f"{topup['username']} nạp thẻ {topup['telco']} +{credited_amount:,}đ" + ("" if status == "1" else " (sai mệnh giá)"),
+                url=url_for("admin_recharges"), meta={"user_id": topup["user_id"], "amount": credited_amount},
+            )
     else:
         # 3 = thẻ lỗi, 4 = hệ thống bảo trì, 100 = gửi thẻ thất bại
         col_card_topups.update_one({"_id": topup["_id"], "status": "processing"}, {"$set": {
