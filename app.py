@@ -1190,6 +1190,81 @@ def _on_gachthefast_failed(topup, status, message):
                  f"Nạp thẻ cào {topup['telco']} thất bại (mã {status}): {message}")
 
 
+def _on_gachthefast_review(topup, reason, details):
+    """Lưu cảnh báo trong admin website và gửi event riêng sang Discord bot."""
+    username = str(topup.get("username") or "Không rõ")
+    request_id = str(topup.get("request_id") or "")
+    telco = str(topup.get("telco") or "Không rõ")
+    face_value = details.get("face_value", details.get("value", topup.get("value")))
+    gtf_amount = details.get("gachthefast_amount", details.get("amount", topup.get("gachthefast_amount")))
+    credited = details.get("credited_amount", topup.get("credited_amount"))
+    margin = details.get("shop_margin", topup.get("shop_margin"))
+    discount = details.get("target_discount_pct", topup.get("target_discount_pct"))
+    event_id = f"narri-gachthefast-review:{topup.get('_id')}:{reason}"[:128]
+
+    message = (
+        f"{username} — {telco} — mã {request_id or 'N/A'} cần đối soát thủ công "
+        f"(lý do: {reason})."
+    )
+    try:
+        notify_admins(
+            kind="card_topup_review",
+            title="⚠️ Nạp thẻ GachTheFast cần đối soát",
+            message=message,
+            url=url_for("admin_recharges"),
+            meta={
+                "event_id": event_id, "topup_id": str(topup.get("_id") or ""),
+                "request_id": request_id, "reason": reason, "status": "review",
+                "face_value": face_value, "gachthefast_amount": gtf_amount,
+                "credited_amount": credited, "shop_margin": margin,
+            },
+        )
+    except Exception as exc:
+        print(f"[gachthefast][review] Không lưu được thông báo admin: {exc}")
+
+    webhook_url = os.environ.get("NARRI_REVIEW_WEBHOOK_URL", "").strip()
+    webhook_secret = os.environ.get("NARRI_REVIEW_WEBHOOK_SECRET", "").strip()
+    if not webhook_url or not webhook_secret:
+        print("[gachthefast][review] Chưa cấu hình NARRI_REVIEW_WEBHOOK_URL/SECRET; chỉ lưu thông báo trên website.")
+        return
+
+    # Không gửi code/serial thẻ sang Discord. Endpoint nội bộ riêng,
+    # tách biệt với bot_callback_url dùng để relay callback GTF.
+    payload = {
+        "event_id": event_id,
+        "request_id": request_id,
+        "username": username,
+        "telco": telco,
+        "reason": reason,
+        "declared_value": topup.get("declared_value"),
+        "face_value": face_value,
+        "gachthefast_amount": gtf_amount,
+        "credited_amount": credited,
+        "shop_margin": margin,
+        "target_discount_pct": discount,
+        "admin_url": url_for("admin_recharges", _external=True),
+    }
+
+    def deliver():
+        import urllib.request
+        req = urllib.request.Request(
+            webhook_url,
+            data=json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "X-Narri-Review-Secret": webhook_secret,
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=8) as response:
+                print(f"[gachthefast][review] Discord bot accepted event {event_id}: HTTP {response.status}")
+        except Exception as exc:
+            print(f"[gachthefast][review] Gửi cảnh báo Discord thất bại ({event_id}): {exc}")
+
+    threading.Thread(target=deliver, name="narri-review-alert", daemon=True).start()
+
+
 @app.route("/charge/callback", methods=["GET", "POST"])
 @app.route("/gachthefast-callback", methods=["GET", "POST"])
 def gachthefast_callback():
@@ -1224,6 +1299,7 @@ def _gachthefast_callback_impl():
         relay=_relay_gachthefast_to_bot,
         on_success=_on_gachthefast_success,
         on_failed=_on_gachthefast_failed,
+        on_review=_on_gachthefast_review,
     )
     return jsonify(body), http_status
 
