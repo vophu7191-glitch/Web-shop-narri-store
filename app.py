@@ -21,7 +21,11 @@ from pymongo import MongoClient, ReturnDocument
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
-from gachthefast_logic import calculate_credit as _calculate_gachthefast_credit, claim_pending_topup, credit_user_once
+from gachthefast_logic import (
+    handle_callback as handle_gachthefast_callback,
+    parse_callback_payload as parse_gachthefast_callback,
+    record_processing_error as record_gachthefast_processing_error,
+)
 
 # 2FA (TOTP) + QR code — optional but recommended
 try:
@@ -1025,9 +1029,9 @@ def sepay_webhook():
 # ══════════════════════════════════════════════════════════════
 #  NẠP THẺ CÀO QUA GACHTHEFAST — endpoint: {domain}/chargingws/v2
 #  sign = md5(partner_key + code + serial)  — đã xác nhận theo tài liệu chính thức.
-#  ⚠️ callback_sign (chữ ký gachthefast gửi kèm khi họ gọi ngược về /charge/callback)
-#  thì CHƯA có công thức — hàm callback bên dưới tạm chỉ đối chiếu request_id,
-#  chưa kiểm tra callback_sign. Nếu có tài liệu phần này thì bổ sung sau.
+#  callback_sign = md5(partner_key + code + serial) — theo Postman collection CARD PARTNER;
+#  callback sai/thiếu chữ ký bị từ chối trước khi cộng ví hoặc relay sang bot.
+#  Logic xử lý callback nằm trong gachthefast_logic.handle_callback.
 # ══════════════════════════════════════════════════════════════
 col_card_topups = db["card_topups"]
 col_card_topups.create_index([("created_at", -1)])
@@ -1144,187 +1148,86 @@ def charge_card():
     return redirect(url_for("wallet"))
 
 
+def _read_gachthefast_callback_data():
+    return parse_gachthefast_callback(
+        request.get_json(silent=True), request.form.to_dict(), request.args.to_dict()
+    )
+
+
+def _relay_gachthefast_to_bot(data):
+    """Không phải đơn của web -> chuyển tiếp cho bot Discord (gachthefast chỉ cho 1 link callback cố định)."""
+    bot_url = get_config().get("bot_callback_url", "").strip()
+    if not bot_url:
+        return
+    try:
+        import urllib.request
+        req = urllib.request.Request(
+            bot_url, data=json.dumps(data).encode("utf-8"),
+            headers={"Content-Type": "application/json"}, method="POST",
+        )
+        urllib.request.urlopen(req, timeout=8)
+    except Exception as e:
+        print(f"[gachthefast] relay to bot failed: {e}")
+
+
+def _on_gachthefast_success(topup, status, credited_amount, target_discount_pct):
+    note = "đúng mệnh giá" if status == "1" else "SAI mệnh giá, cộng theo mệnh giá thực tế"
+    log_activity(topup["user_id"], topup["username"],
+                 f"Nạp thẻ cào {topup['telco']} thành công ({note}, chiết khấu khách {target_discount_pct:g}%) +{credited_amount:,}đ")
+    cfg = get_config()
+    if cfg.get("referral_on_recharge"):
+        _award_referral_commission(topup["user_id"], credited_amount, f"nạp thẻ {topup['telco']}")
+    notify_admins(
+        kind="recharge", title="💳 Nạp thẻ cào thành công",
+        message=f"{topup['username']} nạp thẻ {topup['telco']} +{credited_amount:,}đ" + ("" if status == "1" else " (sai mệnh giá)"),
+        url=url_for("admin_recharges"), meta={"user_id": topup["user_id"], "amount": credited_amount},
+    )
+
+
+def _on_gachthefast_failed(topup, status, message):
+    # 3 = thẻ lỗi, 4 = hệ thống bảo trì, 100 = gửi thẻ thất bại
+    log_activity(topup["user_id"], topup["username"],
+                 f"Nạp thẻ cào {topup['telco']} thất bại (mã {status}): {message}")
+
+
 @app.route("/charge/callback", methods=["GET", "POST"])
 @app.route("/gachthefast-callback", methods=["GET", "POST"])
 def gachthefast_callback():
     try:
         return _gachthefast_callback_impl()
-    except Exception:
+    except Exception as exc:
         import traceback
         traceback.print_exc()  # in traceback đầy đủ ra Render logs
-        # Nếu lỗi xảy ra sau khi callback đã claim đơn, đưa đơn sang review để
-        # admin đối soát; không để đơn treo processing hoặc tự cộng lại khi retry.
+        # Chính sách khôi phục: đơn đã claim vẫn giữ "processing" (ghi lại lỗi) để
+        # callback sau có CÙNG kết quả đã ký tiếp tục xử lý; cộng ví/lịch sử idempotent.
+        # Callback có kết quả khác sẽ đưa đơn sang review, không ghi đè.
         try:
-            callback_data = request.get_json(silent=True) or {}
-            if not callback_data and request.form:
-                callback_data = request.form.to_dict()
-            if not callback_data and request.args:
-                callback_data = request.args.to_dict()
-            callback_request_id = str(callback_data.get("request_id", ""))
-            if callback_request_id:
-                col_card_topups.update_one(
-                    {"request_id": callback_request_id, "status": "processing"},
-                    {"$set": {
-                        "status": "review",
-                        "review_reason": "callback_processing_exception",
-                        "updated_at": datetime.now(timezone.utc),
-                    }},
-                )
+            callback_request_id = str(_read_gachthefast_callback_data().get("request_id", ""))
+            record_gachthefast_processing_error(
+                col_card_topups, callback_request_id, exc, datetime.now(timezone.utc)
+            )
         except Exception:
             traceback.print_exc()
         return jsonify({"status": "error"}), 200  # trả 200 để gachthefast không retry loạn
 
 
-def _safe_int(v):
-    """Ép kiểu int an toàn: chấp nhận cả số, chuỗi số, chuỗi số thực kiểu '8100.0'."""
-    try:
-        return int(v)
-    except (TypeError, ValueError):
-        try:
-            return int(float(v))
-        except (TypeError, ValueError):
-            return 0
-
-
-def _claim_gachthefast_topup(topup_id):
-    """Atomically let only one callback move a top-up from pending to processing."""
-    return claim_pending_topup(
-        col_card_topups, topup_id, datetime.now(timezone.utc)
-    )
-
-
 def _gachthefast_callback_impl():
     """gachthefast gọi ngược route này khi xử lý xong thẻ (không có session -> không qua csrf_protect)."""
-    data = request.get_json(silent=True) or {}
-    if not data and request.form:
-        data = request.form.to_dict()
-    if not data and request.args:
-        data = request.args.to_dict()
-    request_id = str(data.get("request_id", ""))
-    topup = col_card_topups.find_one({"request_id": request_id})
-    if not topup:
-        # Không phải đơn của web -> chuyển tiếp cho bot Discord (vì gachthefast chỉ cho 1 link callback cố định)
-        bot_url = get_config().get("bot_callback_url", "").strip()
-        if bot_url:
-            try:
-                import urllib.request
-                req = urllib.request.Request(
-                    bot_url, data=json.dumps(data).encode("utf-8"),
-                    headers={"Content-Type": "application/json"}, method="POST",
-                )
-                urllib.request.urlopen(req, timeout=8)
-            except Exception as e:
-                print(f"[gachthefast] relay to bot failed: {e}")
-        return jsonify({"status": "ignored"}), 200
+    cfg = get_config()
+    body, http_status = handle_gachthefast_callback(
+        _read_gachthefast_callback_data(),
+        topups=col_card_topups, users=col_users, recharges=col_recharges,
+        partner_key=cfg.get("gachthefast_secret_key", ""),
+        discounts=cfg.get("gachthefast_discount", {}) or {},
+        now=lambda: datetime.now(timezone.utc),
+        new_id=lambda: uuid.uuid4().hex[:12],
+        relay=_relay_gachthefast_to_bot,
+        on_success=_on_gachthefast_success,
+        on_failed=_on_gachthefast_failed,
+    )
+    return jsonify(body), http_status
 
-    status = str(data.get("status", ""))
-    if status == "99":
-        # Thẻ vẫn đang xử lý; không claim để callback kết quả cuối có thể tiếp tục.
-        return jsonify({"status": "pending"}), 200
 
-    # Claim lần đầu bằng compare-and-set. Nếu tiến trình trước bị dừng giữa chừng,
-    # cho phép callback tiếp theo tiếp tục đơn processing; phần cộng ví phía dưới
-    # có idempotency key riêng nên không thể cộng lần hai.
-    if not _claim_gachthefast_topup(topup["_id"]):
-        topup = col_card_topups.find_one({"_id": topup["_id"]}) or topup
-        if topup.get("status") != "processing":
-            return jsonify({"status": "already_processed"}), 200
-
-    amount_credit = _safe_int(data.get("amount", 0))
-    real_value = data.get("value")
-
-    if status in ("1", "2") and amount_credit <= 0:
-        col_card_topups.update_one({"_id": topup["_id"], "status": "processing"}, {"$set": {
-            "status": "review", "value": real_value, "gachthefast_amount": amount_credit,
-            "gachthefast_status": status,
-            "review_reason": "successful_callback_missing_positive_payout",
-            "updated_at": datetime.now(timezone.utc),
-        }})
-        return jsonify({"status": "review"}), 200
-
-    if status in ("1", "2") and amount_credit > 0:
-        cfg_discount = get_config().get("gachthefast_discount", {}) or {}
-        target_discount_value = cfg_discount.get(topup["telco"].lower(), 0) or 0
-        face_value = _safe_int(real_value) or _safe_int(topup.get("declared_value"))
-        try:
-            target_discount_pct = float(target_discount_value)
-            credited_amount, shop_margin = _calculate_gachthefast_credit(
-                face_value, target_discount_pct, amount_credit
-            )
-        except (TypeError, ValueError):
-            col_card_topups.update_one({"_id": topup["_id"], "status": "processing"}, {"$set": {
-                "status": "review", "value": real_value, "gachthefast_amount": amount_credit,
-                "target_discount_pct": target_discount_value,
-                "review_reason": "missing_face_value_or_invalid_target_discount",
-                "updated_at": datetime.now(timezone.utc),
-            }})
-            return jsonify({"status": "review"}), 200
-
-        # Không cho phép cộng ví cao hơn số GTF thực trả: đưa đơn vào review để admin xử lý.
-        if shop_margin < 0:
-            col_card_topups.update_one({"_id": topup["_id"], "status": "processing"}, {"$set": {
-                "status": "review", "value": real_value, "face_value": face_value,
-                "credited_amount": credited_amount, "gachthefast_amount": amount_credit,
-                "target_discount_pct": target_discount_pct, "shop_margin": shop_margin,
-                "review_reason": "gachthefast_payout_below_customer_credit",
-                "updated_at": datetime.now(timezone.utc),
-            }})
-            return jsonify({"status": "review"}), 200
-
-        # Cộng ví đúng một lần bằng idempotency key lưu ngay trên document user.
-        # Nếu process chết sau khi cộng ví nhưng trước khi ghi lịch sử, callback retry
-        # sẽ bỏ qua $inc, hoàn tất upsert lịch sử rồi mới đánh dấu đơn success.
-        topup_key = str(topup["_id"])
-        credited_now, credit_confirmed = credit_user_once(
-            col_users, topup["user_id"], topup_key, credited_amount
-        )
-        if not credit_confirmed:
-            col_card_topups.update_one({"_id": topup["_id"], "status": "processing"}, {"$set": {
-                "status": "review", "review_reason": "wallet_credit_not_confirmed",
-                "updated_at": datetime.now(timezone.utc),
-            }})
-            return jsonify({"status": "review"}), 200
-
-        # Upsert lịch sử theo mã top-up duy nhất, không insert một dòng mới mỗi lần retry.
-        col_recharges.update_one(
-            {"source_topup_id": topup_key},
-            {"$setOnInsert": {
-                "_id": uuid.uuid4().hex[:12],
-                "source_topup_id": topup_key,
-                "user_id": topup["user_id"], "username": topup["username"],
-                "amount": credited_amount, "bank": f"Thẻ cào {topup['telco']}",
-                "source": "gachthefast", "created_at": datetime.now(timezone.utc),
-            }},
-            upsert=True,
-        )
-        col_card_topups.update_one({"_id": topup["_id"], "status": "processing"}, {"$set": {
-            "status": "success", "value": real_value, "face_value": face_value,
-            "credited_amount": credited_amount, "gachthefast_amount": amount_credit,
-            "target_discount_pct": target_discount_pct, "shop_margin": shop_margin,
-            "trans_id": data.get("trans_id"), "updated_at": datetime.now(timezone.utc),
-        }})
-        if credited_now:
-            note = "đúng mệnh giá" if status == "1" else "SAI mệnh giá, cộng theo mệnh giá thực tế"
-            log_activity(topup["user_id"], topup["username"],
-                         f"Nạp thẻ cào {topup['telco']} thành công ({note}, chiết khấu khách {target_discount_pct:g}%) +{credited_amount:,}đ")
-            cfg = get_config()
-            if cfg.get("referral_on_recharge"):
-                _award_referral_commission(topup["user_id"], credited_amount, f"nạp thẻ {topup['telco']}")
-            notify_admins(
-                kind="recharge", title="💳 Nạp thẻ cào thành công",
-                message=f"{topup['username']} nạp thẻ {topup['telco']} +{credited_amount:,}đ" + ("" if status == "1" else " (sai mệnh giá)"),
-                url=url_for("admin_recharges"), meta={"user_id": topup["user_id"], "amount": credited_amount},
-            )
-    else:
-        # 3 = thẻ lỗi, 4 = hệ thống bảo trì, 100 = gửi thẻ thất bại
-        col_card_topups.update_one({"_id": topup["_id"], "status": "processing"}, {"$set": {
-            "status": "failed", "value": real_value, "gachthefast_status": status,
-            "updated_at": datetime.now(timezone.utc),
-        }})
-        log_activity(topup["user_id"], topup["username"],
-                     f"Nạp thẻ cào {topup['telco']} thất bại (mã {status}): {data.get('message','')}")
-
-    return jsonify({"status": "ok"}), 200
 @app.route("/buy/<product_id>", methods=["POST"])
 @login_required
 @csrf_protect
