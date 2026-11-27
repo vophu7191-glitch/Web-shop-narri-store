@@ -74,12 +74,15 @@ class FakeCollection:
 def load_real_delivery_function():
     source_path = pathlib.Path(__file__).resolve().parents[1] / "app.py"
     tree = ast.parse(source_path.read_text(encoding="utf-8"))
-    function = next(
+    functions = [
         node for node in tree.body
         if isinstance(node, ast.FunctionDef)
-        and node.name == "_deliver_gachthefast_review_outbox"
-    )
-    module = ast.Module(body=[function], type_ignores=[])
+        and node.name in {
+            "_deliver_gachthefast_review_outbox",
+            "_post_gachthefast_review_webhook",
+        }
+    ]
+    module = ast.Module(body=functions, type_ignores=[])
     namespace = {
         "datetime": datetime,
         "timezone": timezone,
