@@ -59,6 +59,7 @@ def load_webhook():
         node for node in tree.body
         if isinstance(node, ast.FunctionDef) and node.name == "sepay_webhook"
     )
+    function.decorator_list = []
     namespace = {
         "request": None,
         "jsonify": lambda value: value,
