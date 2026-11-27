@@ -242,20 +242,29 @@
     </form>
 </div>
 
-{% if gachthefast_review_test_enabled %}
 <div class="card p-4 mt-4 border-warning">
     <h6>🧪 Kiểm tra cảnh báo GachTheFast (STAGING ONLY)</h6>
     <p class="text-muted small mb-3">
         Gửi một sự kiện giả lập qua webhook đến bot staging và Discord. Không tạo đơn nạp,
         không gọi callback nhà cung cấp, không thay đổi số dư hoặc lịch sử giao dịch.
     </p>
+    {% if gachthefast_review_test_enabled %}
+    <div class="alert alert-success py-2">Đã bật chế độ kiểm tra staging và URL bot staging hợp lệ.</div>
     <form method="post" action="{{ url_for('admin_test_gachthefast_review_webhook') }}"
           onsubmit="return confirm('Gửi một cảnh báo thử nghiệm đến Discord staging?');">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="btn btn-outline-warning">🧪 Gửi cảnh báo thử</button>
     </form>
+    {% else %}
+    <div class="alert alert-warning py-2 mb-0">
+        Nút gửi đang khóa. Kiểm tra trên Render staging:
+        <code>NARRI_REVIEW_TEST_ENABLED=1</code> và
+        <code>NARRI_REVIEW_WEBHOOK_URL</code> phải trỏ chính xác đến
+        <code>https://narri-discord-bot-staging.onrender.com/internal/gachthefast-review</code>.
+        Sau khi sửa biến môi trường, cần deploy/restart lại service.
+    </div>
+    {% endif %}
 </div>
-{% endif %}
 
 <div class="card p-4 mt-4">
     <h6>🔐 Xác thực 2 lớp (2FA) cho tài khoản admin của bạn</h6>
