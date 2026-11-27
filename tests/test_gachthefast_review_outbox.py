@@ -3,6 +3,7 @@ import json
 import pathlib
 import time
 import unittest
+from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
@@ -181,6 +182,85 @@ class ReviewOutboxDeliveryTests(unittest.TestCase):
             self.assertTrue(self.deliver())
         self.assertEqual(delivery["status"], "sent")
         self.assertEqual(delivery["attempts"], 1)
+
+
+
+
+class MonitorCursor:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def limit(self, count):
+        return self.rows[:count]
+
+
+def load_review_monitor():
+    source_path = pathlib.Path(__file__).resolve().parents[1] / "app.py"
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    function = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_stale_gachthefast_settlement_monitor"
+    )
+    namespace = {
+        "datetime": datetime,
+        "timezone": timezone,
+        "timedelta": timedelta,
+        "time": SimpleNamespace(sleep=lambda seconds: (_ for _ in ()).throw(StopMonitor())),
+        "print": lambda *args, **kwargs: None,
+        "_on_gachthefast_review": lambda *args, **kwargs: None,
+        "_deliver_gachthefast_review_outbox": lambda topup_id: None,
+    }
+    exec(compile(ast.Module(body=[function], type_ignores=[]), str(source_path), "exec"), namespace)
+    return namespace
+
+
+class StopMonitor(BaseException):
+    pass
+
+
+class ReviewOutboxMonitorTests(unittest.TestCase):
+    def run_one_monitor_pass(self, namespace):
+        with self.assertRaises(StopMonitor):
+            namespace["_stale_gachthefast_settlement_monitor"]()
+
+    def test_monitor_retries_pending_and_expired_lease_events(self):
+        rows = [{"_id": "pending-1"}, {"_id": "expired-lease-1"}]
+
+        class Collection:
+            def find(self, query):
+                if "$or" in query:
+                    return MonitorCursor(rows)
+                return MonitorCursor([])
+
+        namespace = load_review_monitor()
+        namespace["col_card_topups"] = Collection()
+        delivered = []
+        namespace["_deliver_gachthefast_review_outbox"] = delivered.append
+
+        self.run_one_monitor_pass(namespace)
+
+        self.assertEqual(delivered, ["pending-1", "expired-lease-1"])
+
+    def test_monitor_rebuilds_missing_outbox_for_review_rows(self):
+        review = {"_id": "review-1", "status": "review", "review_reason": "manual"}
+        rebuilt = []
+
+        class Collection:
+            def find(self, query):
+                if query.get("status") == "review":
+                    return MonitorCursor([review])
+                return MonitorCursor([])
+
+        namespace = load_review_monitor()
+        namespace["col_card_topups"] = Collection()
+        namespace["_on_gachthefast_review"] = lambda *args: rebuilt.append(args)
+
+        self.run_one_monitor_pass(namespace)
+
+        self.assertEqual(len(rebuilt), 1)
+        self.assertEqual(rebuilt[0][0]["_id"], "review-1")
+        self.assertEqual(rebuilt[0][1], "manual")
 
 
 if __name__ == "__main__":
