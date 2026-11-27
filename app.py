@@ -1163,6 +1163,26 @@ def _safe_int(v):
             return 0
 
 
+def _calculate_gachthefast_credit(face_value, target_discount_pct, gtf_amount):
+    """Return customer credit and shop margin from face value and GTF net payout."""
+    face_value = _safe_int(face_value)
+    gtf_amount = _safe_int(gtf_amount)
+    target_discount_pct = float(target_discount_pct)
+    if face_value <= 0 or not (0 <= target_discount_pct < 100):
+        raise ValueError("invalid_face_value_or_target_discount")
+    credited_amount = round(face_value * (100 - target_discount_pct) / 100)
+    return credited_amount, gtf_amount - credited_amount
+
+
+def _claim_gachthefast_topup(topup_id):
+    """Atomically let only one callback move a top-up from pending to processing."""
+    result = col_card_topups.update_one(
+        {"_id": topup_id, "status": "pending"},
+        {"$set": {"status": "processing", "processing_started_at": datetime.now(timezone.utc)}},
+    )
+    return result.matched_count == 1
+
+
 def _gachthefast_callback_impl():
     """gachthefast gọi ngược route này khi xử lý xong thẻ (không có session -> không qua csrf_protect)."""
     data = request.get_json(silent=True) or {}
@@ -1186,27 +1206,30 @@ def _gachthefast_callback_impl():
             except Exception as e:
                 print(f"[gachthefast] relay to bot failed: {e}")
         return jsonify({"status": "ignored"}), 200
-    if topup["status"] != "pending":
-        return jsonify({"status": "already_processed"}), 200
 
-    status        = str(data.get("status", ""))
-    amount_credit = _safe_int(data.get("amount", 0))   # số tiền THỰC NHẬN (đã trừ phí gachthefast)
-    real_value    = data.get("value")
-
+    status = str(data.get("status", ""))
     if status == "99":
-        # Thẻ chờ xử lý — chưa có kết quả cuối, giữ nguyên trạng thái pending, đợi callback tiếp theo
+        # Thẻ vẫn đang xử lý; không claim để callback kết quả cuối có thể tiếp tục.
         return jsonify({"status": "pending"}), 200
 
+    # Không dựa vào lần find_one ở trên để chống race: điều kiện status=pending
+    # được kiểm tra nguyên tử trong MongoDB, chỉ một callback claim thành công.
+    if not _claim_gachthefast_topup(topup["_id"]):
+        return jsonify({"status": "already_processed"}), 200
+
+    amount_credit = _safe_int(data.get("amount", 0))
+    real_value = data.get("value")
+
     if status in ("1", "2") and amount_credit > 0:
-        # gachthefast "amount" la tien GTF thuc tra sau chiet khau cua ho.
-        # gachthefast "value" la menh gia thuc te cua the (neu co); status 2 co the khac menh gia khai bao.
-        # gachthefast_discount la CHIET KHAU CUOI CUNG khach chiu, tinh tren menh gia,
-        # khong phai % tru them tren so tien GTF da tra.
         cfg_discount = get_config().get("gachthefast_discount", {}) or {}
         target_discount_pct = float(cfg_discount.get(topup["telco"].lower(), 0) or 0)
         face_value = _safe_int(real_value) or _safe_int(topup.get("declared_value"))
-        if face_value <= 0 or not (0 <= target_discount_pct < 100):
-            col_card_topups.update_one({"_id": topup["_id"]}, {"$set": {
+        try:
+            credited_amount, shop_margin = _calculate_gachthefast_credit(
+                face_value, target_discount_pct, amount_credit
+            )
+        except (TypeError, ValueError):
+            col_card_topups.update_one({"_id": topup["_id"], "status": "processing"}, {"$set": {
                 "status": "review", "value": real_value, "gachthefast_amount": amount_credit,
                 "target_discount_pct": target_discount_pct,
                 "review_reason": "missing_face_value_or_invalid_target_discount",
@@ -1214,16 +1237,18 @@ def _gachthefast_callback_impl():
             }})
             return jsonify({"status": "review"}), 200
 
-        # Khach nhan dung ty le muc tieu tren menh gia; shop huong phan chenh GTF tra ve.
-        credited_amount = round(face_value * (100 - target_discount_pct) / 100)
-        shop_margin = amount_credit - credited_amount
+        # Không cho phép cộng ví cao hơn số GTF thực trả: đưa đơn vào review để admin xử lý.
+        if shop_margin < 0:
+            col_card_topups.update_one({"_id": topup["_id"], "status": "processing"}, {"$set": {
+                "status": "review", "value": real_value, "face_value": face_value,
+                "credited_amount": credited_amount, "gachthefast_amount": amount_credit,
+                "target_discount_pct": target_discount_pct, "shop_margin": shop_margin,
+                "review_reason": "gachthefast_payout_below_customer_credit",
+                "updated_at": datetime.now(timezone.utc),
+            }})
+            return jsonify({"status": "review"}), 200
 
-        col_card_topups.update_one({"_id": topup["_id"]}, {"$set": {
-            "status": "success", "value": real_value, "face_value": face_value,
-            "credited_amount": credited_amount, "gachthefast_amount": amount_credit,
-            "target_discount_pct": target_discount_pct, "shop_margin": shop_margin,
-            "trans_id": data.get("trans_id"), "updated_at": datetime.now(timezone.utc),
-        }})
+        # Chỉ callback đã claim được đơn mới tới đây; callback trùng không thể cộng ví lần hai.
         col_users.update_one({"_id": topup["user_id"]}, {"$inc": {"balance": credited_amount}})
         col_recharges.insert_one({
             "_id": uuid.uuid4().hex[:12],
@@ -1231,7 +1256,13 @@ def _gachthefast_callback_impl():
             "amount": credited_amount, "bank": f"Thẻ cào {topup['telco']}",
             "source": "gachthefast", "created_at": datetime.now(timezone.utc),
         })
-        note = "đúng mệnh giá" if status == "1" else "SAI mệnh giá, cộng theo số tiền thực nhận"
+        col_card_topups.update_one({"_id": topup["_id"], "status": "processing"}, {"$set": {
+            "status": "success", "value": real_value, "face_value": face_value,
+            "credited_amount": credited_amount, "gachthefast_amount": amount_credit,
+            "target_discount_pct": target_discount_pct, "shop_margin": shop_margin,
+            "trans_id": data.get("trans_id"), "updated_at": datetime.now(timezone.utc),
+        }})
+        note = "đúng mệnh giá" if status == "1" else "SAI mệnh giá, cộng theo mệnh giá thực tế"
         log_activity(topup["user_id"], topup["username"],
                      f"Nạp thẻ cào {topup['telco']} thành công ({note}, chiết khấu khách {target_discount_pct:g}%) +{credited_amount:,}đ")
         cfg = get_config()
@@ -1244,7 +1275,7 @@ def _gachthefast_callback_impl():
         )
     else:
         # 3 = thẻ lỗi, 4 = hệ thống bảo trì, 100 = gửi thẻ thất bại
-        col_card_topups.update_one({"_id": topup["_id"]}, {"$set": {
+        col_card_topups.update_one({"_id": topup["_id"], "status": "processing"}, {"$set": {
             "status": "failed", "value": real_value, "gachthefast_status": status,
             "updated_at": datetime.now(timezone.utc),
         }})
