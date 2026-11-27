@@ -3370,7 +3370,7 @@ def _deliver_gachthefast_review_outbox(topup_id):
                 },
                 method="POST",
             )
-            with urllib.request.urlopen(req, timeout=10) as response:
+            with urllib.request.urlopen(req, timeout=35) as response:
                 body = response.read(2000).decode("utf-8", errors="replace")
                 parsed = json.loads(body) if body else {}
                 if response.status < 200 or response.status >= 300 or parsed.get("success") is not True:
