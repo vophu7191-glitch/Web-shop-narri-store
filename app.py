@@ -1229,14 +1229,8 @@ def _on_gachthefast_review(topup, reason, details):
     except Exception as exc:
         print(f"[gachthefast][review] Không lưu được thông báo admin: {exc}")
 
-    webhook_url = os.environ.get("NARRI_REVIEW_WEBHOOK_URL", "").strip()
-    webhook_secret = os.environ.get("NARRI_REVIEW_WEBHOOK_SECRET", "").strip()
-    if not webhook_url or not webhook_secret:
-        print("[gachthefast][review] Chưa cấu hình NARRI_REVIEW_WEBHOOK_URL/SECRET; chỉ lưu thông báo trên website.")
-        return
-
-    # Không gửi code/serial thẻ sang Discord. Endpoint nội bộ riêng,
-    # tách biệt với bot_callback_url dùng để relay callback GTF.
+    # Lưu payload vào Mongo trước khi gửi. Monitor sẽ tiếp tục thử lại sau restart.
+    # Không lưu/gửi code hoặc serial thẻ sang Discord.
     payload = {
         "event_id": event_id,
         "request_id": request_id,
@@ -1250,30 +1244,44 @@ def _on_gachthefast_review(topup, reason, details):
         "shop_margin": margin,
         "target_discount_pct": discount,
     }
-
-    def deliver():
-        import urllib.request
-        req = urllib.request.Request(
-            webhook_url,
-            data=json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8"),
-            headers={
-                "Content-Type": "application/json",
-                "X-Narri-Review-Secret": webhook_secret,
-            },
-            method="POST",
+    try:
+        col_card_topups.update_one(
+            {"_id": topup.get("_id")},
+            {"$setOnInsert": {"review_delivery": {
+                "event_id": event_id,
+                "status": "pending",
+                "payload": payload,
+                "attempts": 0,
+                "created_at": datetime.now(timezone.utc),
+            }}},
         )
-        for attempt in range(3):
-            try:
-                with urllib.request.urlopen(req, timeout=8) as response:
-                    response_body = response.read(1000).decode("utf-8", errors="replace")
-                    print(f"[gachthefast][review] Bot phản hồi event {event_id}: HTTP {response.status} {response_body}")
-                    return
-            except Exception as exc:
-                print(f"[gachthefast][review] Lần gửi {attempt + 1}/3 thất bại ({event_id}): {exc}")
-                if attempt < 2:
-                    time.sleep(attempt + 1)
+        # Existing review records created before the outbox was introduced are
+        # upgraded without resetting an already delivered event.
+        col_card_topups.update_one(
+            {"_id": topup.get("_id"), "review_delivery": {"$exists": False}},
+            {"$set": {"review_delivery": {
+                "event_id": event_id,
+                "status": "pending",
+                "payload": payload,
+                "attempts": 0,
+                "created_at": datetime.now(timezone.utc),
+            }}},
+        )
+    except Exception as exc:
+        print(f"[gachthefast][review] Không lưu được outbox event {event_id}: {exc}")
+        return
 
-    threading.Thread(target=deliver, name="narri-review-alert", daemon=True).start()
+    webhook_url = os.environ.get("NARRI_REVIEW_WEBHOOK_URL", "").strip()
+    webhook_secret = os.environ.get("NARRI_REVIEW_WEBHOOK_SECRET", "").strip()
+    if not webhook_url or not webhook_secret:
+        print("[gachthefast][review] Thiếu cấu hình webhook; event vẫn được giữ pending trong MongoDB.")
+        return
+    threading.Thread(
+        target=_deliver_gachthefast_review_outbox,
+        args=(topup.get("_id"),),
+        name="narri-review-alert",
+        daemon=True,
+    ).start()
 
 
 @app.route("/charge/callback", methods=["GET", "POST"])
@@ -3326,8 +3334,89 @@ def admin_notifications_mark_read():
     return jsonify({"ok": True})
 
 
+def _deliver_gachthefast_review_outbox(topup_id):
+    """Claim một event bền vững rồi gửi; lỗi/timeout sẽ để monitor retry."""
+    now = datetime.now(timezone.utc)
+    lease_until = now + timedelta(minutes=2)
+    claimed = col_card_topups.update_one(
+        {
+            "_id": topup_id,
+            "$or": [
+                {"review_delivery.status": "pending"},
+                {"review_delivery.status": "sending", "review_delivery.lease_until": {"$lte": now}},
+            ],
+        },
+        {"$set": {
+            "review_delivery.status": "sending",
+            "review_delivery.last_attempt_at": now,
+            "review_delivery.lease_until": lease_until,
+        }, "$inc": {"review_delivery.attempts": 1}},
+    )
+    if claimed.modified_count != 1:
+        return False
+
+    topup = col_card_topups.find_one({"_id": topup_id}) or {}
+    delivery = topup.get("review_delivery") or {}
+    payload = delivery.get("payload") or {}
+    webhook_url = os.environ.get("NARRI_REVIEW_WEBHOOK_URL", "").strip()
+    webhook_secret = os.environ.get("NARRI_REVIEW_WEBHOOK_SECRET", "").strip()
+    if not webhook_url or not webhook_secret:
+        col_card_topups.update_one(
+            {"_id": topup_id, "review_delivery.status": "sending"},
+            {"$set": {"review_delivery.status": "pending",
+                      "review_delivery.last_error": "webhook_not_configured",
+                      "review_delivery.lease_until": now}},
+        )
+        return False
+
+    import urllib.request
+    last_error = "delivery_failed"
+    for attempt in range(3):
+        try:
+            req = urllib.request.Request(
+                webhook_url,
+                data=json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Narri-Review-Secret": webhook_secret,
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=10) as response:
+                body = response.read(2000).decode("utf-8", errors="replace")
+                parsed = json.loads(body) if body else {}
+                if response.status < 200 or response.status >= 300 or parsed.get("success") is not True:
+                    raise RuntimeError(f"bot_ack_not_confirmed_http_{response.status}: {body[:500]}")
+            col_card_topups.update_one(
+                {"_id": topup_id, "review_delivery.status": "sending"},
+                {"$set": {
+                    "review_delivery.status": "sent",
+                    "review_delivery.sent_at": datetime.now(timezone.utc),
+                    "review_delivery.lease_until": None,
+                    "review_delivery.last_error": None,
+                }},
+            )
+            print(f"[gachthefast][review] Đã xác nhận Discord event {payload.get('event_id')}")
+            return True
+        except Exception as exc:
+            last_error = str(exc)[:500]
+            print(f"[gachthefast][review] Lần gửi {attempt + 1}/3 thất bại: {last_error}")
+            if attempt < 2:
+                time.sleep(attempt + 1)
+
+    col_card_topups.update_one(
+        {"_id": topup_id, "review_delivery.status": "sending"},
+        {"$set": {
+            "review_delivery.status": "pending",
+            "review_delivery.lease_until": datetime.now(timezone.utc),
+            "review_delivery.last_error": last_error,
+        }},
+    )
+    return False
+
+
 def _stale_gachthefast_settlement_monitor():
-    """Cảnh báo Discord nếu một giao dịch mắc ở settling quá 5 phút."""
+    """Phát hiện settling treo và phục hồi hàng đợi Discord qua MongoDB."""
     while True:
         try:
             cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
@@ -3357,6 +3446,17 @@ def _stale_gachthefast_settlement_monitor():
                             "target_discount_pct": topup.get("target_discount_pct"),
                         },
                     )
+
+            # Retry pending events and expired leases after process restarts.
+            pending = col_card_topups.find({
+                "$or": [
+                    {"review_delivery.status": "pending"},
+                    {"review_delivery.status": "sending",
+                     "review_delivery.lease_until": {"$lte": datetime.now(timezone.utc)}},
+                ],
+            }).limit(10)
+            for topup in pending:
+                _deliver_gachthefast_review_outbox(topup["_id"])
         except Exception as exc:
             print(f"[gachthefast][review-monitor] {exc}")
         time.sleep(60)
