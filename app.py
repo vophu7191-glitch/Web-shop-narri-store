@@ -1294,12 +1294,13 @@ def gachthefast_callback():
             )
             current = col_card_topups.find_one({"request_id": callback_request_id}) if callback_request_id else None
             if current and current.get("status") == "settling":
+                settlement_result = current.get("settlement_result") or {}
                 _on_gachthefast_review(
                     current,
                     "settlement_interrupted_manual_reconciliation",
                     {
-                        "face_value": current.get("face_value", current.get("value")),
-                        "gachthefast_amount": current.get("gachthefast_amount"),
+                        "face_value": current.get("face_value", current.get("value", settlement_result.get("value"))),
+                        "gachthefast_amount": current.get("gachthefast_amount", settlement_result.get("amount")),
                         "credited_amount": current.get("credited_amount"),
                         "shop_margin": current.get("shop_margin"),
                         "target_discount_pct": current.get("target_discount_pct"),
@@ -3336,6 +3337,7 @@ def _stale_gachthefast_settlement_monitor():
                 "review_alerted_at": {"$exists": False},
             }).limit(100)
             for topup in stale:
+                settlement_result = topup.get("settlement_result") or {}
                 claimed = col_card_topups.update_one(
                     {"_id": topup["_id"], "status": "settling", "review_alerted_at": {"$exists": False}},
                     {"$set": {
@@ -3348,8 +3350,8 @@ def _stale_gachthefast_settlement_monitor():
                         topup,
                         "settlement_stale_manual_reconciliation",
                         {
-                            "face_value": topup.get("face_value", topup.get("value")),
-                            "gachthefast_amount": topup.get("gachthefast_amount"),
+                            "face_value": topup.get("face_value", topup.get("value", settlement_result.get("value"))),
+                            "gachthefast_amount": topup.get("gachthefast_amount", settlement_result.get("amount")),
                             "credited_amount": topup.get("credited_amount"),
                             "shop_margin": topup.get("shop_margin"),
                             "target_discount_pct": topup.get("target_discount_pct"),
