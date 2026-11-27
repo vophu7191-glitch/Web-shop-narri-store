@@ -59,19 +59,12 @@ class GachTheFastCreditTests(unittest.TestCase):
 
     def test_only_first_callback_can_claim_pending_topup(self):
         collection = FakeTopupCollection()
-        first = _claim_gachthefast_topup_with_collection(collection, "topup-1")
-        second = _claim_gachthefast_topup_with_collection(collection, "topup-1")
+        first = _claim_gachthefast_topup("topup-1", collection)
+        second = _claim_gachthefast_topup("topup-1", collection)
         self.assertTrue(first)
         self.assertFalse(second)
         self.assertEqual(collection.status, "processing")
 
-
-def _claim_gachthefast_topup_with_collection(collection, topup_id):
-    result = collection.update_one(
-        {"_id": topup_id, "status": "pending"},
-        {"$set": {"status": "processing"}},
-    )
-    return result.matched_count == 1
 
 
 if __name__ == "__main__":
