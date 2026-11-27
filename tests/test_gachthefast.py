@@ -353,19 +353,70 @@ class DuplicateCallbackTests(unittest.TestCase):
         self.assertEqual(h.balance, 7_700)
         self.assertEqual(len(h.recharges.docs), 1)
 
-    def test_conflicting_callback_while_processing_goes_to_review(self):
+    def test_conflict_wins_before_settlement_fence_no_wallet_side_effects(self):
         h = CallbackHarness()
-        # Simulate a first callback that claimed the top-up then crashed.
         first = h.payload()
-        from gachthefast_logic import normalize_callback_result
-        claim_pending_topup(h.topups, "topup-1", "now", normalize_callback_result(first))
-        body, _ = h.call(h.payload(value=100_000, amount=80_500))
-        self.assertEqual(body, {"status": "review"})
-        self.assertEqual(h.topup["review_reason"], "conflicting_callback_payload")
+        entered_fence = threading.Event()
+        release_fence = threading.Event()
+        original_update = h.topups.update_one
+
+        def pause_first_settlement(query, update, upsert=False):
+            if query.get("status") == "processing" and "callback_result" in query:
+                entered_fence.set()
+                self.assertTrue(release_fence.wait(timeout=5))
+            return original_update(query, update, upsert=upsert)
+
+        h.topups.update_one = pause_first_settlement
+        results = []
+        worker = threading.Thread(target=lambda: results.append(h.call(first)))
+        worker.start()
+        self.assertTrue(entered_fence.wait(timeout=5))
+
+        # B changes processing -> review while A is paused before its atomic fence.
+        conflict = h.payload(value=100_000, amount=80_500)
+        self.assertEqual(h.call(conflict)[0], {"status": "review"})
+        self.assertEqual(h.topup["status"], "review")
+
+        release_fence.set()
+        worker.join(timeout=5)
+        self.assertFalse(worker.is_alive())
         self.assertEqual(h.balance, 0)
-        # Neither the original nor a third callback can now change the terminal state.
-        self.assertEqual(h.call(first)[0], {"status": "already_processed"})
-        self.assertEqual(h.balance, 0)
+        self.assertEqual(h.recharges.docs, [])
+        self.assertEqual(h.topup["status"], "review")
+        self.assertEqual(results, [({"status": "already_processed"}, 200)])
+
+    def test_conflict_cannot_revoke_callback_after_settlement_fence(self):
+        h = CallbackHarness()
+        entered_credit = threading.Event()
+        release_credit = threading.Event()
+        original_credit = __import__("gachthefast_logic").credit_user_once
+
+        def pause_credit(*args, **kwargs):
+            entered_credit.set()
+            self.assertTrue(release_credit.wait(timeout=5))
+            return original_credit(*args, **kwargs)
+
+        import gachthefast_logic
+        gachthefast_logic.credit_user_once = pause_credit
+        results = []
+        worker = threading.Thread(target=lambda: results.append(h.call(h.payload())))
+        try:
+            worker.start()
+            self.assertTrue(entered_credit.wait(timeout=5))
+            self.assertEqual(h.topup["status"], "settling")
+            # Conflicting B cannot move settling to review or interfere with A.
+            self.assertEqual(h.call(h.payload(value=100_000, amount=80_500))[0],
+                             {"status": "already_processed"})
+            self.assertEqual(h.topup["status"], "settling")
+            release_credit.set()
+            worker.join(timeout=5)
+            self.assertFalse(worker.is_alive())
+        finally:
+            release_credit.set()
+            gachthefast_logic.credit_user_once = original_credit
+        self.assertEqual(h.balance, 7_700)
+        self.assertEqual(len(h.recharges.docs), 1)
+        self.assertEqual(h.topup["status"], "success")
 
 
 class RecoveryPolicyTests(unittest.TestCase):
@@ -382,7 +433,7 @@ class RecoveryPolicyTests(unittest.TestCase):
         self.assertEqual(h.topup["status"], "success")
         self.assertEqual(h.balance, 7_700)
 
-    def test_resume_after_crash_between_credit_and_history_credits_once(self):
+    def test_crash_during_settlement_is_fenced_for_manual_reconciliation(self):
         h = CallbackHarness()
         first = h.payload()
         original = h.recharges.update_one
@@ -398,13 +449,14 @@ class RecoveryPolicyTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             h.call(first)
         self.assertEqual(h.balance, 7_700)
-        self.assertEqual(h.topup["status"], "processing")
+        self.assertEqual(h.topup["status"], "settling")
         record_processing_error(h.topups, "req-1", "db hiccup", "now")
-        self.assertEqual(h.call(first)[0], {"status": "ok"})
+        self.assertEqual(h.topup["status"], "settling")
+        # An automatic retry cannot race a still-running settlement or double-credit.
+        self.assertEqual(h.call(first)[0], {"status": "already_processed"})
         self.assertEqual(h.balance, 7_700)
-        self.assertEqual(len(h.recharges.docs), 1)
-        self.assertEqual(h.topup["status"], "success")
-        self.assertEqual(len(h.successes), 1)
+        self.assertEqual(h.recharges.docs, [])
+        self.assertEqual(len(h.successes), 0)
 
     def test_legacy_processing_topup_without_stored_result_adopts_first_result(self):
         h = CallbackHarness()
