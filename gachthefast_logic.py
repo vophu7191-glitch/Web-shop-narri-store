@@ -135,10 +135,11 @@ def _noop(*_args, **_kwargs):
 
 
 def handle_callback(data, *, topups, users, recharges, partner_key, discounts, now,
-                    new_id, relay=None, on_success=None, on_failed=None):
+                    new_id, relay=None, on_success=None, on_failed=None, on_review=None):
     """Process one GachTheFast callback. Returns (json_body, http_status)."""
     on_success = on_success or _noop
     on_failed = on_failed or _noop
+    on_review = on_review or _noop
 
     # 1. Authenticate before any top-up mutation or Discord relay.
     if not verify_callback_sign(partner_key, data):
@@ -170,7 +171,14 @@ def handle_callback(data, *, topups, users, recharges, partner_key, discounts, n
         return topups.update_one({"_id": topup_id, "status": "processing"}, {"$set": fields})
 
     def to_review(reason, **extra):
-        set_if_processing({"status": "review", "review_reason": reason, **extra})
+        review_fields = {"status": "review", "review_reason": reason, **extra}
+        changed = set_if_processing(review_fields)
+        if changed.modified_count == 1:
+            # Notification failure must never change the provider callback outcome.
+            try:
+                on_review(topup, reason, review_fields)
+            except Exception:
+                pass
         return {"status": "review"}, 200
 
     def set_if_settling(fields):
@@ -245,7 +253,13 @@ def handle_callback(data, *, topups, users, recharges, partner_key, discounts, n
             users, topup["user_id"], topup_key, credited_amount
         )
         if not credit_confirmed:
-            set_if_settling({"status": "review", "review_reason": "wallet_credit_not_confirmed"})
+            review_fields = {"status": "review", "review_reason": "wallet_credit_not_confirmed"}
+            changed = set_if_settling(review_fields)
+            if changed.modified_count == 1:
+                try:
+                    on_review(topup, "wallet_credit_not_confirmed", review_fields)
+                except Exception:
+                    pass
             return {"status": "review"}, 200
 
         recharges.update_one(
