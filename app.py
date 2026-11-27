@@ -1233,16 +1233,17 @@ def _gachthefast_callback_impl():
 
     if status in ("1", "2") and amount_credit > 0:
         cfg_discount = get_config().get("gachthefast_discount", {}) or {}
-        target_discount_pct = float(cfg_discount.get(topup["telco"].lower(), 0) or 0)
+        target_discount_value = cfg_discount.get(topup["telco"].lower(), 0) or 0
         face_value = _safe_int(real_value) or _safe_int(topup.get("declared_value"))
         try:
+            target_discount_pct = float(target_discount_value)
             credited_amount, shop_margin = _calculate_gachthefast_credit(
                 face_value, target_discount_pct, amount_credit
             )
         except (TypeError, ValueError):
             col_card_topups.update_one({"_id": topup["_id"], "status": "processing"}, {"$set": {
                 "status": "review", "value": real_value, "gachthefast_amount": amount_credit,
-                "target_discount_pct": target_discount_pct,
+                "target_discount_pct": target_discount_value,
                 "review_reason": "missing_face_value_or_invalid_target_discount",
                 "updated_at": datetime.now(timezone.utc),
             }})
