@@ -1215,8 +1215,7 @@ def _on_gachthefast_review(topup, reason, details):
         "target_discount_pct": discount,
     }
 
-    # Atomic event creation closes the crash window between marking review
-    # and recording the Discord delivery job.
+    # Atomically persist the review marker and its durable delivery job.
     try:
         created_at = datetime.now(timezone.utc)
         stored = col_card_topups.update_one(
