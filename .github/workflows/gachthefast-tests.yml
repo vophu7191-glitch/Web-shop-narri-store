@@ -22,5 +22,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Compile application and callback logic
+        run: python -m py_compile app.py gachthefast_logic.py
       - name: Run GachTheFast unit tests
         run: python -m unittest discover -s tests -p "test_*.py" -v
