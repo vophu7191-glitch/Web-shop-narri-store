@@ -1174,9 +1174,10 @@ def _calculate_gachthefast_credit(face_value, target_discount_pct, gtf_amount):
     return credited_amount, gtf_amount - credited_amount
 
 
-def _claim_gachthefast_topup(topup_id):
+def _claim_gachthefast_topup(topup_id, collection=None):
     """Atomically let only one callback move a top-up from pending to processing."""
-    result = col_card_topups.update_one(
+    collection = collection or col_card_topups
+    result = collection.update_one(
         {"_id": topup_id, "status": "pending"},
         {"$set": {"status": "processing", "processing_started_at": datetime.now(timezone.utc)}},
     )
