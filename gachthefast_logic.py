@@ -253,7 +253,16 @@ def handle_callback(data, *, topups, users, recharges, partner_key, discounts, n
             users, topup["user_id"], topup_key, credited_amount
         )
         if not credit_confirmed:
-            review_fields = {"status": "review", "review_reason": "wallet_credit_not_confirmed"}
+            review_fields = {
+                "status": "review",
+                "review_reason": "wallet_credit_not_confirmed",
+                "value": face_value,
+                "face_value": face_value,
+                "gachthefast_amount": gtf_amount,
+                "credited_amount": credited_amount,
+                "shop_margin": shop_margin,
+                "target_discount_pct": target_discount_pct,
+            }
             changed = set_if_settling(review_fields)
             if changed.modified_count == 1:
                 try:
