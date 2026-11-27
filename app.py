@@ -2842,7 +2842,40 @@ def admin_settings():
     return render_template("admin_settings.html",
                            cfg=get_config(), webhook_url=webhook_url, api_base=api_base,
                            gachthefast_callback_url=gachthefast_callback_url,
-                           has_pyotp=_HAS_PYOTP, has_qrcode=_HAS_QRCODE)
+                           has_pyotp=_HAS_PYOTP, has_qrcode=_HAS_QRCODE,
+                           gachthefast_review_test_enabled=_gachthefast_review_test_enabled())
+
+
+@app.route("/admin/test-gachthefast-review-webhook", methods=["POST"])
+@admin_required
+@csrf_protect
+def admin_test_gachthefast_review_webhook():
+    """Send a synthetic alert only on the explicitly enabled staging service."""
+    if not _gachthefast_review_test_enabled():
+        return "Not Found", 404
+
+    payload = {
+        "event_id": "narri-staging-test-" + uuid.uuid4().hex[:16],
+        "request_id": "STAGING-TEST-ONLY",
+        "username": "STAGING TEST",
+        "telco": "Viettel",
+        "reason": "synthetic_webhook_test",
+        "declared_value": 10000,
+        "face_value": 10000,
+        "gachthefast_amount": 8050,
+        "credited_amount": 7700,
+        "shop_margin": 350,
+        "target_discount_pct": 23,
+    }
+    try:
+        _post_gachthefast_review_webhook(payload)
+    except Exception as exc:
+        print(f"[gachthefast][review-test] Gửi thử thất bại: {type(exc).__name__}: {exc}")
+        flash("Gửi thử cảnh báo thất bại. Kiểm tra Render Logs để biết nguyên nhân.", "error")
+    else:
+        log_admin("Gửi cảnh báo GachTheFast staging giả lập (không tạo giao dịch)")
+        flash("Đã gửi cảnh báo thử. Kiểm tra kênh Discord nhận đối soát.", "success")
+    return redirect(url_for("admin_settings"))
 
 
 @app.route("/admin/api-key/regen", methods=["POST"])
@@ -3328,6 +3361,47 @@ def admin_notifications_mark_read():
     return jsonify({"ok": True})
 
 
+def _gachthefast_review_test_enabled():
+    """Fail closed: test button requires an explicit flag and the staging bot host."""
+    if os.environ.get("NARRI_REVIEW_TEST_ENABLED", "").strip() != "1":
+        return False
+    from urllib.parse import urlsplit
+    parsed = urlsplit(os.environ.get("NARRI_REVIEW_WEBHOOK_URL", "").strip())
+    return (
+        parsed.scheme == "https"
+        and parsed.hostname == "narri-discord-bot-staging.onrender.com"
+        and parsed.path == "/internal/gachthefast-review"
+        and not parsed.query
+        and not parsed.username
+        and not parsed.password
+    )
+
+
+def _post_gachthefast_review_webhook(payload):
+    """POST one review alert and require an explicit positive bot acknowledgement."""
+    webhook_url = os.environ.get("NARRI_REVIEW_WEBHOOK_URL", "").strip()
+    webhook_secret = os.environ.get("NARRI_REVIEW_WEBHOOK_SECRET", "").strip()
+    if not webhook_url or not webhook_secret:
+        raise RuntimeError("webhook_not_configured")
+
+    import urllib.request
+    req = urllib.request.Request(
+        webhook_url,
+        data=json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "X-Narri-Review-Secret": webhook_secret,
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=35) as response:
+        body = response.read(2000).decode("utf-8", errors="replace")
+        parsed = json.loads(body) if body else {}
+        if response.status < 200 or response.status >= 300 or parsed.get("success") is not True:
+            raise RuntimeError(f"bot_ack_not_confirmed_http_{response.status}: {body[:500]}")
+    return parsed
+
+
 def _deliver_gachthefast_review_outbox(topup_id):
     """Claim một event bền vững rồi gửi; lỗi/timeout sẽ để monitor retry."""
     now = datetime.now(timezone.utc)
@@ -3367,20 +3441,7 @@ def _deliver_gachthefast_review_outbox(topup_id):
     last_error = "delivery_failed"
     for attempt in range(3):
         try:
-            req = urllib.request.Request(
-                webhook_url,
-                data=json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8"),
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Narri-Review-Secret": webhook_secret,
-                },
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=35) as response:
-                body = response.read(2000).decode("utf-8", errors="replace")
-                parsed = json.loads(body) if body else {}
-                if response.status < 200 or response.status >= 300 or parsed.get("success") is not True:
-                    raise RuntimeError(f"bot_ack_not_confirmed_http_{response.status}: {body[:500]}")
+            _post_gachthefast_review_webhook(payload)
             col_card_topups.update_one(
                 {"_id": topup_id, "review_delivery.status": "sending"},
                 {"$set": {
