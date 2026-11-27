@@ -38,7 +38,7 @@ class GachTheFastCreditTests(unittest.TestCase):
                 self.assertEqual(margin, expected_margin)
 
     def test_negative_margin_is_reported_not_hidden(self):
-        credit, margin = _calculate_gachthefast_credit(100_000, 23, 70_000)
+        credit, margin = calculate_credit(100_000, 23, 70_000)
         self.assertEqual(credit, 77_000)
         self.assertEqual(margin, -7_000)
 
@@ -46,18 +46,18 @@ class GachTheFastCreditTests(unittest.TestCase):
         for face_value in (0, -1, None, "invalid"):
             with self.subTest(face_value=face_value):
                 with self.assertRaises(ValueError):
-                    _calculate_gachthefast_credit(face_value, 23, 8_050)
+                    calculate_credit(face_value, 23, 8_050)
 
     def test_invalid_target_discount_rejected(self):
         for discount in (-0.1, 100, 120):
             with self.subTest(discount=discount):
                 with self.assertRaises(ValueError):
-                    _calculate_gachthefast_credit(10_000, discount, 8_050)
+                    calculate_credit(10_000, discount, 8_050)
 
     def test_only_first_callback_can_claim_pending_topup(self):
         collection = FakeTopupCollection()
         first = claim_pending_topup(collection, "topup-1", "now")
-        second = _claim_gachthefast_topup("topup-1", collection)
+        second = claim_pending_topup(collection, "topup-1", "now")
         self.assertTrue(first)
         self.assertFalse(second)
         self.assertEqual(collection.status, "processing")
