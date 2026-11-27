@@ -70,10 +70,11 @@ class ReviewWebhookSmokeTestTests(unittest.TestCase):
 
     def test_post_sends_payload_and_shared_secret_and_requires_positive_ack(self):
         payload = {"event_id": "synthetic-test-1", "reason": "synthetic_webhook_test"}
+        expected_url = (
+            "https://narri-discord-bot-staging.onrender.com/internal/gachthefast-review"
+        )
         with patch.dict(os.environ, {
-            "NARRI_REVIEW_WEBHOOK_URL": (
-                "https://narri-discord-bot-staging.onrender.com/internal/gachthefast-review"
-            ),
+            "NARRI_REVIEW_WEBHOOK_URL": expected_url,
             "NARRI_REVIEW_WEBHOOK_SECRET": "unit-test-secret",
         }, clear=False), patch(
             "urllib.request.urlopen", return_value=FakeResponse()
@@ -82,7 +83,7 @@ class ReviewWebhookSmokeTestTests(unittest.TestCase):
 
         self.assertEqual(result, {"success": True})
         request = send.call_args.args[0]
-        self.assertEqual(request.full_url, os.environ["NARRI_REVIEW_WEBHOOK_URL"])
+        self.assertEqual(request.full_url, expected_url)
         self.assertEqual(request.get_header("X-narri-review-secret"), "unit-test-secret")
         self.assertEqual(json.loads(request.data.decode("utf-8")), payload)
         self.assertEqual(send.call_args.kwargs["timeout"], 35)
