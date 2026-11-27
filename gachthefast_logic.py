@@ -33,3 +33,17 @@ def claim_pending_topup(collection, topup_id, processing_started_at=None):
         {"$set": fields},
     )
     return result.matched_count == 1
+
+
+def credit_user_once(users_collection, user_id, topup_key, amount):
+    """Atomically credit a top-up once and confirm its idempotency marker exists."""
+    result = users_collection.update_one(
+        {"_id": user_id, "processed_card_topup_ids": {"$ne": topup_key}},
+        {"$inc": {"balance": amount},
+         "$addToSet": {"processed_card_topup_ids": topup_key}},
+    )
+    user = users_collection.find_one(
+        {"_id": user_id}, {"processed_card_topup_ids": 1}
+    )
+    confirmed = bool(user and topup_key in (user.get("processed_card_topup_ids") or []))
+    return result.modified_count == 1, confirmed
