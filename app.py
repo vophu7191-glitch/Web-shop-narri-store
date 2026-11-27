@@ -1218,7 +1218,7 @@ def _on_gachthefast_review(topup, reason, details):
             kind="card_topup_review",
             title="⚠️ Nạp thẻ GachTheFast cần đối soát",
             message=message,
-            url=url_for("admin_recharges"),
+            url="/admin/recharges",
             meta={
                 "event_id": event_id, "topup_id": str(topup.get("_id") or ""),
                 "request_id": request_id, "reason": reason, "status": "review",
