@@ -1,11 +1,30 @@
 import unittest
 
-from gachthefast_logic import calculate_credit, claim_pending_topup
+from gachthefast_logic import calculate_credit, claim_pending_topup, credit_user_once
 
 
 class FakeUpdateResult:
     def __init__(self, matched_count):
         self.matched_count = matched_count
+
+
+class FakeUserCollection:
+    def __init__(self):
+        self.user = {"_id": "user-1", "balance": 0, "processed_card_topup_ids": []}
+
+    def update_one(self, query, update):
+        if query.get("_id") != self.user["_id"]:
+            return FakeUpdateResult(0)
+        if query.get("processed_card_topup_ids", {}).get("$ne") in self.user["processed_card_topup_ids"]:
+            return FakeUpdateResult(0)
+        self.user["balance"] += update["$inc"]["balance"]
+        key = update["$addToSet"]["processed_card_topup_ids"]
+        if key not in self.user["processed_card_topup_ids"]:
+            self.user["processed_card_topup_ids"].append(key)
+        return FakeUpdateResult(1)
+
+    def find_one(self, query, projection):
+        return self.user
 
 
 class FakeTopupCollection:
@@ -53,6 +72,14 @@ class GachTheFastCreditTests(unittest.TestCase):
             with self.subTest(discount=discount):
                 with self.assertRaises(ValueError):
                     calculate_credit(10_000, discount, 8_050)
+
+    def test_wallet_credit_is_idempotent_when_callback_retries(self):
+        users = FakeUserCollection()
+        first = credit_user_once(users, "user-1", "topup-1", 7_700)
+        second = credit_user_once(users, "user-1", "topup-1", 7_700)
+        self.assertEqual(first, (True, True))
+        self.assertEqual(second, (False, True))
+        self.assertEqual(users.user["balance"], 7_700)
 
     def test_only_first_callback_can_claim_pending_topup(self):
         collection = FakeTopupCollection()
