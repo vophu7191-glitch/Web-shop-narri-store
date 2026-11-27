@@ -173,6 +173,13 @@ def handle_callback(data, *, topups, users, recharges, partner_key, discounts, n
         set_if_processing({"status": "review", "review_reason": reason, **extra})
         return {"status": "review"}, 200
 
+    def set_if_settling(fields):
+        fields["updated_at"] = now()
+        return topups.update_one(
+            {"_id": topup_id, "status": "settling"},
+            {"$set": fields},
+        )
+
     # 2. Claim, or resume a stuck "processing" top-up only with an identical result.
     if not claim_pending_topup(topups, topup_id, now(), result):
         current = topups.find_one({"_id": topup_id}) or {}
@@ -220,12 +227,26 @@ def handle_callback(data, *, topups, users, recharges, partner_key, discounts, n
                              credited_amount=credited_amount, gachthefast_amount=gtf_amount,
                              target_discount_pct=target_discount_pct, shop_margin=shop_margin)
 
+        # Fence the callback before any irreversible side effect. A conflicting callback
+        # may move "processing" to "review", but can never revoke a "settling" owner.
+        settlement_claim = topups.update_one(
+            {"_id": topup_id, "status": "processing", "callback_result": result},
+            {"$set": {"status": "settling", "settling_started_at": now(),
+                      "settlement_result": result}},
+        )
+        if settlement_claim.modified_count != 1:
+            current = topups.find_one({"_id": topup_id}) or {}
+            if current.get("status") == "settling":
+                return {"status": "settlement_in_progress"}, 200
+            return {"status": "already_processed"}, 200
+
         topup_key = str(topup_id)
         _credited_now, credit_confirmed = credit_user_once(
             users, topup["user_id"], topup_key, credited_amount
         )
         if not credit_confirmed:
-            return to_review("wallet_credit_not_confirmed")
+            set_if_settling({"status": "review", "review_reason": "wallet_credit_not_confirmed"})
+            return {"status": "review"}, 200
 
         recharges.update_one(
             {"source_topup_id": topup_key},
@@ -238,7 +259,7 @@ def handle_callback(data, *, topups, users, recharges, partner_key, discounts, n
             }},
             upsert=True,
         )
-        final = set_if_processing({
+        final = set_if_settling({
             "status": "success", "value": face_value, "face_value": face_value,
             "credited_amount": credited_amount, "gachthefast_amount": gtf_amount,
             "gachthefast_status": status, "target_discount_pct": target_discount_pct,
