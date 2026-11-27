@@ -1198,15 +1198,30 @@ def _gachthefast_callback_impl():
         return jsonify({"status": "pending"}), 200
 
     if status in ("1", "2") and amount_credit > 0:
-        # 1 = đúng mệnh giá, 2 = sai mệnh giá nhưng thẻ vẫn được chấp nhận (cộng theo số tiền thực nhận)
-        # Chiết khấu thêm của chủ shop (ngoài phần gachthefast đã trừ sẵn trong amount_credit):
+        # gachthefast "amount" la tien GTF thuc tra sau chiet khau cua ho.
+        # gachthefast "value" la menh gia thuc te cua the (neu co); status 2 co the khac menh gia khai bao.
+        # gachthefast_discount la CHIET KHAU CUOI CUNG khach chiu, tinh tren menh gia,
+        # khong phai % tru them tren so tien GTF da tra.
         cfg_discount = get_config().get("gachthefast_discount", {}) or {}
-        discount_pct = float(cfg_discount.get(topup["telco"].lower(), 0) or 0)
-        credited_amount = round(amount_credit * (100 - discount_pct) / 100)
+        target_discount_pct = float(cfg_discount.get(topup["telco"].lower(), 0) or 0)
+        face_value = _safe_int(real_value) or _safe_int(topup.get("declared_value"))
+        if face_value <= 0 or not (0 <= target_discount_pct < 100):
+            col_card_topups.update_one({"_id": topup["_id"]}, {"$set": {
+                "status": "review", "value": real_value, "gachthefast_amount": amount_credit,
+                "target_discount_pct": target_discount_pct,
+                "review_reason": "missing_face_value_or_invalid_target_discount",
+                "updated_at": datetime.now(timezone.utc),
+            }})
+            return jsonify({"status": "review"}), 200
+
+        # Khach nhan dung ty le muc tieu tren menh gia; shop huong phan chenh GTF tra ve.
+        credited_amount = round(face_value * (100 - target_discount_pct) / 100)
+        shop_margin = amount_credit - credited_amount
 
         col_card_topups.update_one({"_id": topup["_id"]}, {"$set": {
-            "status": "success", "value": real_value, "credited_amount": credited_amount,
-            "gachthefast_amount": amount_credit, "discount_pct": discount_pct,
+            "status": "success", "value": real_value, "face_value": face_value,
+            "credited_amount": credited_amount, "gachthefast_amount": amount_credit,
+            "target_discount_pct": target_discount_pct, "shop_margin": shop_margin,
             "trans_id": data.get("trans_id"), "updated_at": datetime.now(timezone.utc),
         }})
         col_users.update_one({"_id": topup["user_id"]}, {"$inc": {"balance": credited_amount}})
@@ -1218,7 +1233,7 @@ def _gachthefast_callback_impl():
         })
         note = "đúng mệnh giá" if status == "1" else "SAI mệnh giá, cộng theo số tiền thực nhận"
         log_activity(topup["user_id"], topup["username"],
-                     f"Nạp thẻ cào {topup['telco']} thành công ({note}, chiết khấu {discount_pct:g}%) +{credited_amount:,}đ")
+                     f"Nạp thẻ cào {topup['telco']} thành công ({note}, chiết khấu khách {target_discount_pct:g}%) +{credited_amount:,}đ")
         cfg = get_config()
         if cfg.get("referral_on_recharge"):
             _award_referral_commission(topup["user_id"], credited_amount, f"nạp thẻ {topup['telco']}")
