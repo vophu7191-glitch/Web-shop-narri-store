@@ -1150,6 +1150,26 @@ def gachthefast_callback():
     except Exception:
         import traceback
         traceback.print_exc()  # in traceback đầy đủ ra Render logs
+        # Nếu lỗi xảy ra sau khi callback đã claim đơn, đưa đơn sang review để
+        # admin đối soát; không để đơn treo processing hoặc tự cộng lại khi retry.
+        try:
+            callback_data = request.get_json(silent=True) or {}
+            if not callback_data and request.form:
+                callback_data = request.form.to_dict()
+            if not callback_data and request.args:
+                callback_data = request.args.to_dict()
+            callback_request_id = str(callback_data.get("request_id", ""))
+            if callback_request_id:
+                col_card_topups.update_one(
+                    {"request_id": callback_request_id, "status": "processing"},
+                    {"$set": {
+                        "status": "review",
+                        "review_reason": "callback_processing_exception",
+                        "updated_at": datetime.now(timezone.utc),
+                    }},
+                )
+        except Exception:
+            traceback.print_exc()
         return jsonify({"status": "error"}), 200  # trả 200 để gachthefast không retry loạn
 
 
