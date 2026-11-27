@@ -1219,8 +1219,15 @@ def _on_gachthefast_review(topup, reason, details):
     try:
         created_at = datetime.now(timezone.utc)
         stored = col_card_topups.update_one(
-            {"_id": topup.get("_id"), "review_delivery": {"$exists": False}},
+            {
+                "_id": topup.get("_id"),
+                "status": {"$in": ["review", "settling"]},
+                "review_delivery": {"$exists": False},
+            },
             {"$set": {
+                # A settling transaction sent for manual reconciliation must leave
+                # the settlement queue; otherwise the monitor will never revisit it.
+                "status": "review",
                 "review_alerted_at": created_at,
                 "review_reason": reason,
                 "review_delivery": {
