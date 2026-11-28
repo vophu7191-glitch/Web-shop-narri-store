@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 from flask import Flask, jsonify
 
-from gachthefast_logic import record_processing_error
+from gachthefast_logic import credit_user_once, record_processing_error
 
 
 def _get_path(document, path):
@@ -31,6 +31,32 @@ def _set_path(document, path, value):
 class FakeUpdateResult:
     def __init__(self, modified_count):
         self.modified_count = modified_count
+
+
+class FakeUsers:
+    def __init__(self):
+        self.document = {
+            "_id": "user-route-test",
+            "balance": 0,
+            "processed_card_topup_ids": [],
+        }
+
+    def update_one(self, query, update):
+        if query.get("_id") != self.document["_id"]:
+            return FakeUpdateResult(0)
+        marker = query.get("processed_card_topup_ids", {}).get("$ne")
+        if marker in self.document["processed_card_topup_ids"]:
+            return FakeUpdateResult(0)
+        self.document["balance"] += update.get("$inc", {}).get("balance", 0)
+        add_marker = update.get("$addToSet", {}).get("processed_card_topup_ids")
+        if add_marker is not None and add_marker not in self.document["processed_card_topup_ids"]:
+            self.document["processed_card_topup_ids"].append(add_marker)
+        return FakeUpdateResult(1)
+
+    def find_one(self, query, projection=None):
+        if query.get("_id") != self.document["_id"]:
+            return None
+        return copy.deepcopy(self.document)
 
 
 class FakeTopups:
@@ -127,13 +153,16 @@ def _load_callback_route():
 class CallbackWrapperExceptionTests(unittest.TestCase):
     def test_route_exception_moves_settling_topup_to_review_with_one_outbox(self):
         flask_app, topups, notifications = _load_callback_route()
-        wallet = {"balance": 0}
+        users = FakeUsers()
         calls = {"count": 0}
 
         def fail_during_settlement():
             calls["count"] += 1
             if calls["count"] == 1:
                 topups.document["status"] = "settling"
+                # Model a crash after the idempotent wallet write but before
+                # the callback can finish its remaining settlement work.
+                credit_user_once(users, "user-route-test", "topup-route-test", 7_700)
             raise RuntimeError("simulated settlement operation failure")
 
         namespace = flask_app.view_functions["gachthefast_callback"].__globals__
@@ -161,7 +190,8 @@ class CallbackWrapperExceptionTests(unittest.TestCase):
         self.assertEqual(topups.document["status"], "review")
         self.assertEqual(topups.document["review_delivery"]["event_id"], first_event_id)
         self.assertEqual(len(notifications), 1)
-        self.assertEqual(wallet["balance"], 0)
+        self.assertEqual(users.document["balance"], 7_700)
+        self.assertEqual(users.document["processed_card_topup_ids"], ["topup-route-test"])
 
 
 if __name__ == "__main__":
