@@ -184,6 +184,34 @@ class ReviewOutboxDeliveryTests(unittest.TestCase):
         self.assertEqual(delivery["attempts"], 1)
 
 
+    def test_failed_delivery_is_retried_with_same_event_and_then_marked_sent(self):
+        original_event_id = self.document["review_delivery"]["event_id"]
+        original_payload = self.document["review_delivery"]["payload"]
+
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=TimeoutError("temporary network failure"),
+        ) as failed_send, patch("time.sleep"):
+            self.assertFalse(self.deliver())
+
+        self.assertEqual(failed_send.call_count, 3)
+        self.assertEqual(self.document["review_delivery"]["status"], "pending")
+        self.assertEqual(self.document["review_delivery"]["attempts"], 1)
+
+        with patch(
+            "urllib.request.urlopen",
+            return_value=FakeResponse({"success": True}),
+        ) as recovered_send:
+            self.assertTrue(self.deliver())
+
+        self.assertEqual(recovered_send.call_count, 1)
+        delivery = self.document["review_delivery"]
+        self.assertEqual(delivery["status"], "sent")
+        self.assertEqual(delivery["attempts"], 2)
+        self.assertEqual(delivery["event_id"], original_event_id)
+        self.assertEqual(delivery["payload"], original_payload)
+
+
 
 
 class MonitorCursor:
