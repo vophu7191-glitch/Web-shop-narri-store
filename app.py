@@ -21,6 +21,11 @@ from pymongo import MongoClient, ReturnDocument
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
+from gachthefast_logic import (
+    handle_callback as handle_gachthefast_callback,
+    parse_callback_payload as parse_gachthefast_callback,
+    record_processing_error as record_gachthefast_processing_error,
+)
 
 # 2FA (TOTP) + QR code — optional but recommended
 try:
@@ -1024,13 +1029,15 @@ def sepay_webhook():
 # ══════════════════════════════════════════════════════════════
 #  NẠP THẺ CÀO QUA GACHTHEFAST — endpoint: {domain}/chargingws/v2
 #  sign = md5(partner_key + code + serial)  — đã xác nhận theo tài liệu chính thức.
-#  ⚠️ callback_sign (chữ ký gachthefast gửi kèm khi họ gọi ngược về /charge/callback)
-#  thì CHƯA có công thức — hàm callback bên dưới tạm chỉ đối chiếu request_id,
-#  chưa kiểm tra callback_sign. Nếu có tài liệu phần này thì bổ sung sau.
+#  callback_sign = md5(partner_key + code + serial) — theo Postman collection CARD PARTNER;
+#  callback sai/thiếu chữ ký bị từ chối trước khi cộng ví hoặc relay sang bot.
+#  Logic xử lý callback nằm trong gachthefast_logic.handle_callback.
 # ══════════════════════════════════════════════════════════════
 col_card_topups = db["card_topups"]
 col_card_topups.create_index([("created_at", -1)])
 col_card_topups.create_index("request_id", unique=True)
+# Một top-up chỉ tạo tối đa một dòng lịch sử nạp, kể cả callback được gửi lại.
+col_recharges.create_index("source_topup_id", unique=True, sparse=True)
 
 
 # Danh mục loại thẻ gachthefast.com hỗ trợ (đồng bộ với mapping đã xác nhận bên bot Discord).
@@ -1141,102 +1148,189 @@ def charge_card():
     return redirect(url_for("wallet"))
 
 
+def _read_gachthefast_callback_data():
+    return parse_gachthefast_callback(
+        request.get_json(silent=True), request.form.to_dict(), request.args.to_dict()
+    )
+
+
+def _relay_gachthefast_to_bot(data):
+    """Không phải đơn của web -> chuyển tiếp cho bot Discord (gachthefast chỉ cho 1 link callback cố định)."""
+    bot_url = get_config().get("bot_callback_url", "").strip()
+    if not bot_url:
+        return
+    try:
+        import urllib.request
+        req = urllib.request.Request(
+            bot_url, data=json.dumps(data).encode("utf-8"),
+            headers={"Content-Type": "application/json"}, method="POST",
+        )
+        urllib.request.urlopen(req, timeout=8)
+    except Exception as e:
+        print(f"[gachthefast] relay to bot failed: {e}")
+
+
+def _on_gachthefast_success(topup, status, credited_amount, target_discount_pct):
+    note = "đúng mệnh giá" if status == "1" else "SAI mệnh giá, cộng theo mệnh giá thực tế"
+    log_activity(topup["user_id"], topup["username"],
+                 f"Nạp thẻ cào {topup['telco']} thành công ({note}, chiết khấu khách {target_discount_pct:g}%) +{credited_amount:,}đ")
+    cfg = get_config()
+    if cfg.get("referral_on_recharge"):
+        _award_referral_commission(topup["user_id"], credited_amount, f"nạp thẻ {topup['telco']}")
+    notify_admins(
+        kind="recharge", title="💳 Nạp thẻ cào thành công",
+        message=f"{topup['username']} nạp thẻ {topup['telco']} +{credited_amount:,}đ" + ("" if status == "1" else " (sai mệnh giá)"),
+        url=url_for("admin_recharges"), meta={"user_id": topup["user_id"], "amount": credited_amount},
+    )
+
+
+def _on_gachthefast_failed(topup, status, message):
+    # 3 = thẻ lỗi, 4 = hệ thống bảo trì, 100 = gửi thẻ thất bại
+    log_activity(topup["user_id"], topup["username"],
+                 f"Nạp thẻ cào {topup['telco']} thất bại (mã {status}): {message}")
+
+
+def _on_gachthefast_review(topup, reason, details):
+    """Persist a manual-review event before any best-effort notification."""
+    username = str(topup.get("username") or "Không rõ")
+    request_id = str(topup.get("request_id") or "")
+    telco = str(topup.get("telco") or "Không rõ")
+    face_value = details.get("face_value", details.get("value", topup.get("value")))
+    gtf_amount = details.get("gachthefast_amount", details.get("amount", topup.get("gachthefast_amount")))
+    credited = details.get("credited_amount", topup.get("credited_amount"))
+    margin = details.get("shop_margin", topup.get("shop_margin"))
+    discount = details.get("target_discount_pct", topup.get("target_discount_pct"))
+    event_id = f"narri-gachthefast-review:{topup.get('_id')}:{reason}"[:128]
+    payload = {
+        "event_id": event_id,
+        "request_id": request_id,
+        "username": username,
+        "telco": telco,
+        "reason": reason,
+        "declared_value": topup.get("declared_value"),
+        "face_value": face_value,
+        "gachthefast_amount": gtf_amount,
+        "credited_amount": credited,
+        "shop_margin": margin,
+        "target_discount_pct": discount,
+    }
+
+    # Atomically persist the review marker and its durable delivery job.
+    try:
+        created_at = datetime.now(timezone.utc)
+        stored = col_card_topups.update_one(
+            {
+                "_id": topup.get("_id"),
+                "status": {"$in": ["review", "settling"]},
+                "review_delivery": {"$exists": False},
+            },
+            {"$set": {
+                # A settling transaction sent for manual reconciliation must leave
+                # the settlement queue; otherwise the monitor will never revisit it.
+                "status": "review",
+                "review_alerted_at": created_at,
+                "review_reason": reason,
+                "review_delivery": {
+                    "event_id": event_id,
+                    "status": "pending",
+                    "payload": payload,
+                    "attempts": 0,
+                    "created_at": created_at,
+                },
+            }},
+        )
+        if stored.modified_count != 1:
+            return
+    except Exception as exc:
+        print(f"[gachthefast][review] Không lưu được outbox event {event_id}: {exc}")
+        return
+
+    message = (
+        f"{username} — {telco} — mã {request_id or 'N/A'} cần đối soát thủ công "
+        f"(lý do: {reason})."
+    )
+    try:
+        notify_admins(
+            kind="card_topup_review",
+            title="⚠️ Nạp thẻ GachTheFast cần đối soát",
+            message=message,
+            url="/admin/recharges",
+            meta={
+                "event_id": event_id, "topup_id": str(topup.get("_id") or ""),
+                "request_id": request_id, "reason": reason, "status": "review",
+                "face_value": face_value, "gachthefast_amount": gtf_amount,
+                "credited_amount": credited, "shop_margin": margin,
+            },
+        )
+    except Exception as exc:
+        print(f"[gachthefast][review] Không lưu được thông báo admin: {exc}")
+
+    webhook_url = os.environ.get("NARRI_REVIEW_WEBHOOK_URL", "").strip()
+    webhook_secret = os.environ.get("NARRI_REVIEW_WEBHOOK_SECRET", "").strip()
+    if not webhook_url or not webhook_secret:
+        print("[gachthefast][review] Thiếu cấu hình webhook; event vẫn được giữ pending trong MongoDB.")
+        return
+    threading.Thread(
+        target=_deliver_gachthefast_review_outbox,
+        args=(topup.get("_id"),),
+        name="narri-review-alert",
+        daemon=True,
+    ).start()
+
+
 @app.route("/charge/callback", methods=["GET", "POST"])
 @app.route("/gachthefast-callback", methods=["GET", "POST"])
 def gachthefast_callback():
     try:
         return _gachthefast_callback_impl()
-    except Exception:
+    except Exception as exc:
         import traceback
         traceback.print_exc()  # in traceback đầy đủ ra Render logs
-        return jsonify({"status": "error"}), 200  # trả 200 để gachthefast không retry loạn
-
-
-def _safe_int(v):
-    """Ép kiểu int an toàn: chấp nhận cả số, chuỗi số, chuỗi số thực kiểu '8100.0'."""
-    try:
-        return int(v)
-    except (TypeError, ValueError):
+        # Chính sách khôi phục: đơn đã claim vẫn giữ "processing" (ghi lại lỗi) để
+        # callback sau có CÙNG kết quả đã ký tiếp tục xử lý; cộng ví/lịch sử idempotent.
+        # Callback có kết quả khác sẽ đưa đơn sang review, không ghi đè.
         try:
-            return int(float(v))
-        except (TypeError, ValueError):
-            return 0
+            callback_request_id = str(_read_gachthefast_callback_data().get("request_id", ""))
+            record_gachthefast_processing_error(
+                col_card_topups, callback_request_id, exc, datetime.now(timezone.utc)
+            )
+            current = col_card_topups.find_one({"request_id": callback_request_id}) if callback_request_id else None
+            if current and current.get("status") == "settling":
+                settlement_result = current.get("settlement_result") or {}
+                _on_gachthefast_review(
+                    current,
+                    "settlement_interrupted_manual_reconciliation",
+                    {
+                        "face_value": current.get("face_value", current.get("value", settlement_result.get("value"))),
+                        "gachthefast_amount": current.get("gachthefast_amount", settlement_result.get("amount")),
+                        "credited_amount": current.get("credited_amount"),
+                        "shop_margin": current.get("shop_margin"),
+                        "target_discount_pct": current.get("target_discount_pct"),
+                    },
+                )
+        except Exception:
+            traceback.print_exc()
+        return jsonify({"status": "error"}), 200  # giữ nguyên response provider
 
 
 def _gachthefast_callback_impl():
     """gachthefast gọi ngược route này khi xử lý xong thẻ (không có session -> không qua csrf_protect)."""
-    data = request.get_json(silent=True) or {}
-    if not data and request.form:
-        data = request.form.to_dict()
-    if not data and request.args:
-        data = request.args.to_dict()
-    request_id = str(data.get("request_id", ""))
-    topup = col_card_topups.find_one({"request_id": request_id})
-    if not topup:
-        # Không phải đơn của web -> chuyển tiếp cho bot Discord (vì gachthefast chỉ cho 1 link callback cố định)
-        bot_url = get_config().get("bot_callback_url", "").strip()
-        if bot_url:
-            try:
-                import urllib.request
-                req = urllib.request.Request(
-                    bot_url, data=json.dumps(data).encode("utf-8"),
-                    headers={"Content-Type": "application/json"}, method="POST",
-                )
-                urllib.request.urlopen(req, timeout=8)
-            except Exception as e:
-                print(f"[gachthefast] relay to bot failed: {e}")
-        return jsonify({"status": "ignored"}), 200
-    if topup["status"] != "pending":
-        return jsonify({"status": "already_processed"}), 200
+    cfg = get_config()
+    body, http_status = handle_gachthefast_callback(
+        _read_gachthefast_callback_data(),
+        topups=col_card_topups, users=col_users, recharges=col_recharges,
+        partner_key=cfg.get("gachthefast_secret_key", ""),
+        discounts=cfg.get("gachthefast_discount", {}) or {},
+        now=lambda: datetime.now(timezone.utc),
+        new_id=lambda: uuid.uuid4().hex[:12],
+        relay=_relay_gachthefast_to_bot,
+        on_success=_on_gachthefast_success,
+        on_failed=_on_gachthefast_failed,
+        on_review=_on_gachthefast_review,
+    )
+    return jsonify(body), http_status
 
-    status        = str(data.get("status", ""))
-    amount_credit = _safe_int(data.get("amount", 0))   # số tiền THỰC NHẬN (đã trừ phí gachthefast)
-    real_value    = data.get("value")
 
-    if status == "99":
-        # Thẻ chờ xử lý — chưa có kết quả cuối, giữ nguyên trạng thái pending, đợi callback tiếp theo
-        return jsonify({"status": "pending"}), 200
-
-    if status in ("1", "2") and amount_credit > 0:
-        # 1 = đúng mệnh giá, 2 = sai mệnh giá nhưng thẻ vẫn được chấp nhận (cộng theo số tiền thực nhận)
-        # Chiết khấu thêm của chủ shop (ngoài phần gachthefast đã trừ sẵn trong amount_credit):
-        cfg_discount = get_config().get("gachthefast_discount", {}) or {}
-        discount_pct = float(cfg_discount.get(topup["telco"].lower(), 0) or 0)
-        credited_amount = round(amount_credit * (100 - discount_pct) / 100)
-
-        col_card_topups.update_one({"_id": topup["_id"]}, {"$set": {
-            "status": "success", "value": real_value, "credited_amount": credited_amount,
-            "gachthefast_amount": amount_credit, "discount_pct": discount_pct,
-            "trans_id": data.get("trans_id"), "updated_at": datetime.now(timezone.utc),
-        }})
-        col_users.update_one({"_id": topup["user_id"]}, {"$inc": {"balance": credited_amount}})
-        col_recharges.insert_one({
-            "_id": uuid.uuid4().hex[:12],
-            "user_id": topup["user_id"], "username": topup["username"],
-            "amount": credited_amount, "bank": f"Thẻ cào {topup['telco']}",
-            "source": "gachthefast", "created_at": datetime.now(timezone.utc),
-        })
-        note = "đúng mệnh giá" if status == "1" else "SAI mệnh giá, cộng theo số tiền thực nhận"
-        log_activity(topup["user_id"], topup["username"],
-                     f"Nạp thẻ cào {topup['telco']} thành công ({note}, chiết khấu {discount_pct:g}%) +{credited_amount:,}đ")
-        cfg = get_config()
-        if cfg.get("referral_on_recharge"):
-            _award_referral_commission(topup["user_id"], credited_amount, f"nạp thẻ {topup['telco']}")
-        notify_admins(
-            kind="recharge", title="💳 Nạp thẻ cào thành công",
-            message=f"{topup['username']} nạp thẻ {topup['telco']} +{credited_amount:,}đ" + ("" if status == "1" else " (sai mệnh giá)"),
-            url=url_for("admin_recharges"), meta={"user_id": topup["user_id"], "amount": credited_amount},
-        )
-    else:
-        # 3 = thẻ lỗi, 4 = hệ thống bảo trì, 100 = gửi thẻ thất bại
-        col_card_topups.update_one({"_id": topup["_id"]}, {"$set": {
-            "status": "failed", "value": real_value, "gachthefast_status": status,
-            "updated_at": datetime.now(timezone.utc),
-        }})
-        log_activity(topup["user_id"], topup["username"],
-                     f"Nạp thẻ cào {topup['telco']} thất bại (mã {status}): {data.get('message','')}")
-
-    return jsonify({"status": "ok"}), 200
 @app.route("/buy/<product_id>", methods=["POST"])
 @login_required
 @csrf_protect
@@ -2748,7 +2842,40 @@ def admin_settings():
     return render_template("admin_settings.html",
                            cfg=get_config(), webhook_url=webhook_url, api_base=api_base,
                            gachthefast_callback_url=gachthefast_callback_url,
-                           has_pyotp=_HAS_PYOTP, has_qrcode=_HAS_QRCODE)
+                           has_pyotp=_HAS_PYOTP, has_qrcode=_HAS_QRCODE,
+                           gachthefast_review_test_enabled=_gachthefast_review_test_enabled())
+
+
+@app.route("/admin/test-gachthefast-review-webhook", methods=["POST"])
+@admin_required
+@csrf_protect
+def admin_test_gachthefast_review_webhook():
+    """Send a synthetic alert only on the explicitly enabled staging service."""
+    if not _gachthefast_review_test_enabled():
+        return "Not Found", 404
+
+    payload = {
+        "event_id": "narri-staging-test-" + uuid.uuid4().hex[:16],
+        "request_id": "STAGING-TEST-ONLY",
+        "username": "STAGING TEST",
+        "telco": "Viettel",
+        "reason": "synthetic_webhook_test",
+        "declared_value": 10000,
+        "face_value": 10000,
+        "gachthefast_amount": 8050,
+        "credited_amount": 7700,
+        "shop_margin": 350,
+        "target_discount_pct": 23,
+    }
+    try:
+        _post_gachthefast_review_webhook(payload)
+    except Exception as exc:
+        print(f"[gachthefast][review-test] Gửi thử thất bại: {type(exc).__name__}: {exc}")
+        flash("Gửi thử cảnh báo thất bại. Kiểm tra Render Logs để biết nguyên nhân.", "error")
+    else:
+        log_admin("Gửi cảnh báo GachTheFast staging giả lập (không tạo giao dịch)")
+        flash("Đã gửi cảnh báo thử. Kiểm tra kênh Discord nhận đối soát.", "success")
+    return redirect(url_for("admin_settings"))
 
 
 @app.route("/admin/api-key/regen", methods=["POST"])
@@ -3234,8 +3361,196 @@ def admin_notifications_mark_read():
     return jsonify({"ok": True})
 
 
+def _gachthefast_review_test_enabled():
+    """Fail closed: test button requires an explicit flag and the staging bot host."""
+    if os.environ.get("NARRI_REVIEW_TEST_ENABLED", "").strip() != "1":
+        return False
+    from urllib.parse import urlsplit
+    parsed = urlsplit(os.environ.get("NARRI_REVIEW_WEBHOOK_URL", "").strip())
+    return (
+        parsed.scheme == "https"
+        and parsed.hostname == "narri-discord-bot-staging.onrender.com"
+        and parsed.path == "/internal/gachthefast-review"
+        and not parsed.query
+        and not parsed.username
+        and not parsed.password
+    )
+
+
+def _post_gachthefast_review_webhook(payload):
+    """POST one review alert and require an explicit positive bot acknowledgement."""
+    webhook_url = os.environ.get("NARRI_REVIEW_WEBHOOK_URL", "").strip()
+    webhook_secret = os.environ.get("NARRI_REVIEW_WEBHOOK_SECRET", "").strip()
+    if not webhook_url or not webhook_secret:
+        raise RuntimeError("webhook_not_configured")
+
+    import urllib.request
+    req = urllib.request.Request(
+        webhook_url,
+        data=json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "X-Narri-Review-Secret": webhook_secret,
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=35) as response:
+        body = response.read(2000).decode("utf-8", errors="replace")
+        parsed = json.loads(body) if body else {}
+        if response.status < 200 or response.status >= 300 or parsed.get("success") is not True:
+            raise RuntimeError(f"bot_ack_not_confirmed_http_{response.status}: {body[:500]}")
+    return parsed
+
+
+def _deliver_gachthefast_review_outbox(topup_id):
+    """Claim một event bền vững rồi gửi; lỗi/timeout sẽ để monitor retry."""
+    now = datetime.now(timezone.utc)
+    lease_until = now + timedelta(minutes=2)
+    claimed = col_card_topups.update_one(
+        {
+            "_id": topup_id,
+            "$or": [
+                {"review_delivery.status": "pending"},
+                {"review_delivery.status": "sending", "review_delivery.lease_until": {"$lte": now}},
+            ],
+        },
+        {"$set": {
+            "review_delivery.status": "sending",
+            "review_delivery.last_attempt_at": now,
+            "review_delivery.lease_until": lease_until,
+        }, "$inc": {"review_delivery.attempts": 1}},
+    )
+    if claimed.modified_count != 1:
+        return False
+
+    topup = col_card_topups.find_one({"_id": topup_id}) or {}
+    delivery = topup.get("review_delivery") or {}
+    payload = delivery.get("payload") or {}
+    webhook_url = os.environ.get("NARRI_REVIEW_WEBHOOK_URL", "").strip()
+    webhook_secret = os.environ.get("NARRI_REVIEW_WEBHOOK_SECRET", "").strip()
+    if not webhook_url or not webhook_secret:
+        col_card_topups.update_one(
+            {"_id": topup_id, "review_delivery.status": "sending"},
+            {"$set": {"review_delivery.status": "pending",
+                      "review_delivery.last_error": "webhook_not_configured",
+                      "review_delivery.lease_until": now}},
+        )
+        return False
+
+    import urllib.request
+    last_error = "delivery_failed"
+    for attempt in range(3):
+        try:
+            _post_gachthefast_review_webhook(payload)
+            col_card_topups.update_one(
+                {"_id": topup_id, "review_delivery.status": "sending"},
+                {"$set": {
+                    "review_delivery.status": "sent",
+                    "review_delivery.sent_at": datetime.now(timezone.utc),
+                    "review_delivery.lease_until": None,
+                    "review_delivery.last_error": None,
+                }},
+            )
+            print(f"[gachthefast][review] Đã xác nhận Discord event {payload.get('event_id')}")
+            return True
+        except Exception as exc:
+            last_error = str(exc)[:500]
+            print(f"[gachthefast][review] Lần gửi {attempt + 1}/3 thất bại: {last_error}")
+            if attempt < 2:
+                time.sleep(attempt + 1)
+
+    col_card_topups.update_one(
+        {"_id": topup_id, "review_delivery.status": "sending"},
+        {"$set": {
+            "review_delivery.status": "pending",
+            "review_delivery.lease_until": datetime.now(timezone.utc),
+            "review_delivery.last_error": last_error,
+        }},
+    )
+    return False
+
+
+def _stale_gachthefast_settlement_monitor():
+    """Phát hiện settling treo và phục hồi hàng đợi Discord qua MongoDB."""
+    print("[gachthefast][review-monitor] Started; polling interval=60s.", flush=True)
+    while True:
+        stale_checked = 0
+        unqueued_checked = 0
+        pending_checked = 0
+        delivered = 0
+        try:
+            cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
+            stale = col_card_topups.find({
+                "status": "settling",
+                "settling_started_at": {"$lte": cutoff},
+                "review_delivery": {"$exists": False},
+            }).limit(100)
+            for topup in stale:
+                stale_checked += 1
+                settlement_result = topup.get("settlement_result") or {}
+                _on_gachthefast_review(
+                    topup,
+                    "settlement_stale_manual_reconciliation",
+                    {
+                        "face_value": topup.get("face_value", topup.get("value", settlement_result.get("value"))),
+                        "gachthefast_amount": topup.get("gachthefast_amount", settlement_result.get("amount")),
+                        "credited_amount": topup.get("credited_amount"),
+                        "shop_margin": topup.get("shop_margin"),
+                        "target_discount_pct": topup.get("target_discount_pct"),
+                    },
+                )
+
+            # Recover review rows whose process stopped after the callback state
+            # transition but before the durable outbox was created.
+            unqueued_reviews = col_card_topups.find({
+                "status": "review",
+                "review_delivery": {"$exists": False},
+            }).limit(50)
+            for topup in unqueued_reviews:
+                unqueued_checked += 1
+                reason = topup.get("review_reason") or "manual_reconciliation_required"
+                _on_gachthefast_review(
+                    topup, reason,
+                    {
+                        "face_value": topup.get("face_value", topup.get("value")),
+                        "gachthefast_amount": topup.get("gachthefast_amount"),
+                        "credited_amount": topup.get("credited_amount"),
+                        "shop_margin": topup.get("shop_margin"),
+                        "target_discount_pct": topup.get("target_discount_pct"),
+                    },
+                )
+
+            # Retry pending events and expired leases after process restarts.
+            pending = col_card_topups.find({
+                "$or": [
+                    {"review_delivery.status": "pending"},
+                    {"review_delivery.status": "sending",
+                     "review_delivery.lease_until": {"$lte": datetime.now(timezone.utc)}},
+                ],
+            }).limit(10)
+            for topup in pending:
+                pending_checked += 1
+                if _deliver_gachthefast_review_outbox(topup["_id"]):
+                    delivered += 1
+
+            print(
+                "[gachthefast][review-monitor] heartbeat "
+                f"stale={stale_checked} unqueued={unqueued_checked} "
+                f"pending_attempted={pending_checked} delivered={delivered}",
+                flush=True,
+            )
+        except Exception as exc:
+            print(f"[gachthefast][review-monitor] cycle failed: {exc}", flush=True)
+        time.sleep(60)
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     from waitress import serve
+    threading.Thread(
+        target=_stale_gachthefast_settlement_monitor,
+        name="gachthefast-review-monitor",
+        daemon=True,
+    ).start()
     print(f"🚀 Chạy production server (waitress) tại cổng {port}")
     serve(app, host="0.0.0.0", port=port)

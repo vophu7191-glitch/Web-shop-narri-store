@@ -137,7 +137,7 @@
         </div>
         <p class="text-muted small">Callback URL cần khai báo bên gachthefast: <code>{{ gachthefast_callback_url }}</code></p>
 
-        <label class="mt-2">Chiết khấu thêm theo từng loại thẻ (%) — trừ thêm vào số tiền khách nhận, ngoài phần gachthefast đã tự trừ sẵn</label>
+        <label class="mt-2">Chiết khấu cuối cùng khách chịu theo từng loại thẻ (%)</label>
         <div class="form-row">
             {% for telco_key, telco_label in [('viettel','Viettel'), ('vinaphone','Vinaphone'), ('mobifone','Mobifone'), ('zing','Zing'), ('garenacham','Garena tốt'), ('garena','Garena'), ('vcoin','Vcoin'), ('scoin','Scoin'), ('gate','Gate')] %}
             <div class="col-md-2 col-4 form-group">
@@ -150,7 +150,7 @@
             </div>
             {% endfor %}
         </div>
-        <p class="text-muted small">VD: thẻ Viettel 100.000đ, gachthefast trả thực nhận ~80.000đ (họ đã trừ 20%). Nếu đặt thêm 23% ở đây, khách chỉ được cộng <code>80.000 × 77% ≈ 61.600đ</code> — phần chênh lệch là lợi nhuận của shop.</p>
+        <p class="text-muted small">Đây là mức chiết khấu TỔNG khách phải chịu, tính trên mệnh giá thẻ. VD Viettel 10.000đ: GTF chiết khấu 19,5% và trả 8.050đ; đặt mức khách chịu 23% thì khách được cộng 7.700đ, shop hưởng chênh lệch 350đ. Hệ thống không trừ % lần hai trên tiền GTF trả về. Nếu GTF trả thấp hơn số khách được nhận, phần chênh lệch shop sẽ âm.</p>
 
         <div class="form-group">
             <label>🔁 Link callback riêng của bot Discord (để web chuyển tiếp — chỉ cần nếu bot cũng dùng chung gachthefast)</label>
@@ -240,6 +240,30 @@
 
         <button class="btn btn-primary">💾 Lưu cấu hình</button>
     </form>
+</div>
+
+<div class="card p-4 mt-4 border-warning">
+    <h6>🧪 Kiểm tra cảnh báo GachTheFast (STAGING ONLY)</h6>
+    <p class="text-muted small mb-3">
+        Gửi một sự kiện giả lập qua webhook đến bot staging và Discord. Không tạo đơn nạp,
+        không gọi callback nhà cung cấp, không thay đổi số dư hoặc lịch sử giao dịch.
+    </p>
+    {% if gachthefast_review_test_enabled %}
+    <div class="alert alert-success py-2">Đã bật chế độ kiểm tra staging và URL bot staging hợp lệ.</div>
+    <form method="post" action="{{ url_for('admin_test_gachthefast_review_webhook') }}"
+          onsubmit="return confirm('Gửi một cảnh báo thử nghiệm đến Discord staging?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-outline-warning">🧪 Gửi cảnh báo thử</button>
+    </form>
+    {% else %}
+    <div class="alert alert-warning py-2 mb-0">
+        Nút gửi đang khóa. Kiểm tra trên Render staging:
+        <code>NARRI_REVIEW_TEST_ENABLED=1</code> và
+        <code>NARRI_REVIEW_WEBHOOK_URL</code> phải trỏ chính xác đến
+        <code>https://narri-discord-bot-staging.onrender.com/internal/gachthefast-review</code>.
+        Sau khi sửa biến môi trường, cần deploy/restart lại service.
+    </div>
+    {% endif %}
 </div>
 
 <div class="card p-4 mt-4">
