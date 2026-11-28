@@ -6,8 +6,6 @@ import unittest
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-from flask import Flask, jsonify
-
 from gachthefast_logic import credit_user_once, record_processing_error
 
 
@@ -128,7 +126,7 @@ def _load_callback_route():
     }
     topups = FakeTopups(topup)
     namespace = {
-        "jsonify": jsonify,
+        "jsonify": lambda payload: payload,
         "datetime": datetime,
         "timezone": timezone,
         "traceback": __import__("traceback"),
@@ -143,16 +141,12 @@ def _load_callback_route():
     module = ast.Module(body=[review_node, route_node], type_ignores=[])
     exec(compile(module, str(source_path), "exec"), namespace)
 
-    flask_app = Flask(__name__)
-    flask_app.add_url_rule(
-        "/charge/callback", view_func=namespace["gachthefast_callback"], methods=["POST"]
-    )
-    return flask_app, topups, notifications
+    return namespace["gachthefast_callback"], topups, notifications
 
 
 class CallbackWrapperExceptionTests(unittest.TestCase):
     def test_route_exception_moves_settling_topup_to_review_with_one_outbox(self):
-        flask_app, topups, notifications = _load_callback_route()
+        route, topups, notifications = _load_callback_route()
         users = FakeUsers()
         calls = {"count": 0}
 
@@ -165,13 +159,12 @@ class CallbackWrapperExceptionTests(unittest.TestCase):
                 credit_user_once(users, "user-route-test", "topup-route-test", 7_700)
             raise RuntimeError("simulated settlement operation failure")
 
-        namespace = flask_app.view_functions["gachthefast_callback"].__globals__
+        namespace = route.__globals__
         namespace["_gachthefast_callback_impl"] = fail_during_settlement
 
-        client = flask_app.test_client()
-        first = client.post("/charge/callback")
-        self.assertEqual(first.status_code, 200)
-        self.assertEqual(first.get_json(), {"status": "error"})
+        first_body, first_status = route()
+        self.assertEqual(first_status, 200)
+        self.assertEqual(first_body, {"status": "error"})
         self.assertEqual(topups.document["status"], "review")
         self.assertEqual(
             topups.document["review_reason"],
@@ -184,9 +177,9 @@ class CallbackWrapperExceptionTests(unittest.TestCase):
 
         # A repeated exception after the row is already in review must not
         # recreate the durable event or alter the wallet.
-        second = client.post("/charge/callback")
-        self.assertEqual(second.status_code, 200)
-        self.assertEqual(second.get_json(), {"status": "error"})
+        second_body, second_status = route()
+        self.assertEqual(second_status, 200)
+        self.assertEqual(second_body, {"status": "error"})
         self.assertEqual(topups.document["status"], "review")
         self.assertEqual(topups.document["review_delivery"]["event_id"], first_event_id)
         self.assertEqual(len(notifications), 1)
