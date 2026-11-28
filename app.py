@@ -3472,7 +3472,12 @@ def _deliver_gachthefast_review_outbox(topup_id):
 
 def _stale_gachthefast_settlement_monitor():
     """Phát hiện settling treo và phục hồi hàng đợi Discord qua MongoDB."""
+    print("[gachthefast][review-monitor] Started; polling interval=60s.", flush=True)
     while True:
+        stale_checked = 0
+        unqueued_checked = 0
+        pending_checked = 0
+        delivered = 0
         try:
             cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
             stale = col_card_topups.find({
@@ -3481,6 +3486,7 @@ def _stale_gachthefast_settlement_monitor():
                 "review_delivery": {"$exists": False},
             }).limit(100)
             for topup in stale:
+                stale_checked += 1
                 settlement_result = topup.get("settlement_result") or {}
                 _on_gachthefast_review(
                     topup,
@@ -3501,6 +3507,7 @@ def _stale_gachthefast_settlement_monitor():
                 "review_delivery": {"$exists": False},
             }).limit(50)
             for topup in unqueued_reviews:
+                unqueued_checked += 1
                 reason = topup.get("review_reason") or "manual_reconciliation_required"
                 _on_gachthefast_review(
                     topup, reason,
@@ -3522,9 +3529,18 @@ def _stale_gachthefast_settlement_monitor():
                 ],
             }).limit(10)
             for topup in pending:
-                _deliver_gachthefast_review_outbox(topup["_id"])
+                pending_checked += 1
+                if _deliver_gachthefast_review_outbox(topup["_id"]):
+                    delivered += 1
+
+            print(
+                "[gachthefast][review-monitor] heartbeat "
+                f"stale={stale_checked} unqueued={unqueued_checked} "
+                f"pending_attempted={pending_checked} delivered={delivered}",
+                flush=True,
+            )
         except Exception as exc:
-            print(f"[gachthefast][review-monitor] {exc}")
+            print(f"[gachthefast][review-monitor] cycle failed: {exc}", flush=True)
         time.sleep(60)
 
 
